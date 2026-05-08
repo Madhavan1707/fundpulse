@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FundPulse — Alerts</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <script src="supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:        #070c18;
+      --navy-2:      #0b1220;
+      --navy-3:      #0f1a2e;
+      --navy-4:      #142038;
+      --blue:        #2360f5;
+      --blue-light:  #4a7cff;
+      --blue-dim:    rgba(35,96,245,0.12);
+      --green:       #00d47e;
+      --green-dim:   rgba(0,212,126,0.12);
+      --red:         #ff4060;
+      --red-dim:     rgba(255,64,96,0.12);
+      --yellow:      #ffb400;
+      --yellow-dim:  rgba(255,180,0,0.12);
+      --white:       #edf2ff;
+      --muted:       #7a8fb0;
+      --muted-2:     #4a5878;
+      --card:        rgba(255,255,255,0.04);
+      --cb:          rgba(255,255,255,0.08);
+    }
+    html, body { height: 100%; }
+    body {
+      background: var(--navy); color: var(--white);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 400; overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LAYOUT ── */
+    .app-screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--cb);
+      background: rgba(7,12,24,0.96);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      flex-shrink: 0; z-index: 10;
+    }
+    .app-logo {
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem;
+      letter-spacing: -.02em; display: flex; align-items: center; gap: 8px;
+      color: var(--white); text-decoration: none;
+    }
+    .logo-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--blue);
+      box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(35,96,245,.5);
+      animation: dp 2.2s ease-in-out infinite;
+    }
+    @keyframes dp {
+      0%,100%{box-shadow:0 0 6px var(--blue),0 0 14px rgba(35,96,245,.4);}
+      50%{box-shadow:0 0 14px var(--blue),0 0 28px rgba(35,96,245,.6);}
+    }
+    .header-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), #0a1f5c);
+      border: 1.5px solid rgba(35,96,245,.4);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif; font-weight: 700;
+      font-size: .78rem; color: var(--white); cursor: pointer;
+      transition: transform .2s;
+    }
+    .header-avatar:hover { transform: scale(1.08); }
+
+    /* ── SCROLL BODY ── */
+    .alerts-body {
+      flex: 1; overflow-y: auto; padding: 0 0 12px;
+    }
+    .alerts-body::-webkit-scrollbar { width: 3px; }
+    .alerts-body::-webkit-scrollbar-track { background: transparent; }
+    .alerts-body::-webkit-scrollbar-thumb { background: var(--navy-4); border-radius: 3px; }
+
+    /* ── PAGE TITLE ── */
+    .page-title-row {
+      padding: 20px 20px 4px;
+      display: flex; align-items: flex-end; justify-content: space-between;
+    }
+    .page-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.5rem; letter-spacing: -.025em;
+    }
+    .page-subtitle { font-size: .72rem; color: var(--muted-2); margin-top: 3px; }
+
+    /* ── SECTION LABEL ── */
+    .section-lbl {
+      font-size: .65rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--blue-light);
+      padding: 20px 20px 8px; display: block;
+    }
+
+    /* ── HISTORY SECTION ── */
+    .history-list { display: flex; flex-direction: column; gap: 1px; margin: 0 16px; }
+    .history-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px;
+      background: var(--navy-3); border: 1px solid var(--cb);
+      transition: background .18s;
+    }
+    .history-item:first-child { border-radius: 12px 12px 0 0; }
+    .history-item:last-child  { border-radius: 0 0 12px 12px; }
+    .history-item:only-child  { border-radius: 12px; }
+    .history-item:not(:last-child) { border-bottom-color: transparent; }
+    .history-item:hover { background: var(--navy-4); }
+    .hi-icon {
+      width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: .9rem;
+    }
+    .hi-icon.down   { background: var(--red-dim);    border: 1px solid rgba(255,64,96,.2);  }
+    .hi-icon.up     { background: var(--green-dim);  border: 1px solid rgba(0,212,126,.2);  }
+    .hi-icon.change { background: var(--yellow-dim); border: 1px solid rgba(255,180,0,.2);  }
+    .hi-body { flex: 1; min-width: 0; }
+    .hi-title { font-size: .8rem; font-weight: 500; color: var(--white); }
+    .hi-title b.down   { color: var(--red);    font-weight: 600; }
+    .hi-title b.up     { color: var(--green);  font-weight: 600; }
+    .hi-title b.change { color: var(--yellow); font-weight: 600; }
+    .hi-fund  { font-size: .68rem; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hi-time  { font-size: .65rem; color: var(--muted-2); flex-shrink: 0; }
+    .hi-channel {
+      font-size: .58rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      border-radius: 100px; padding: 2px 7px; flex-shrink: 0;
+    }
+    .ch-email   { background: var(--blue-dim);  color: var(--blue-light); border: 1px solid rgba(35,96,245,.2); }
+    .ch-whatsapp{ background: var(--green-dim); color: var(--green);      border: 1px solid rgba(0,212,126,.2); }
+    .ch-sms     { background: var(--yellow-dim);color: var(--yellow);     border: 1px solid rgba(255,180,0,.2); }
+
+    .see-older {
+      text-align: center; padding: 10px; font-size: .72rem; color: var(--blue-light);
+      cursor: pointer; transition: color .2s;
+    }
+    .see-older:hover { color: var(--white); }
+
+    /* ── FUND ALERT CARDS ── */
+    .fund-alerts-list { display: flex; flex-direction: column; gap: 10px; padding: 0 16px; }
+
+    .fac {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 14px; overflow: hidden;
+      transition: border-color .25s;
+    }
+    .fac.expanded { border-color: rgba(35,96,245,.3); }
+
+    /* card header row */
+    .fac-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; cursor: pointer;
+      transition: background .18s;
+    }
+    .fac-header:hover { background: rgba(255,255,255,.02); }
+    .fac-icon {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .fac-info { flex: 1; min-width: 0; }
+    .fac-name {
+      font-family: 'Outfit', sans-serif; font-weight: 700;
+      font-size: .9rem; color: var(--white);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fac-meta { font-size: .68rem; color: var(--muted); margin-top: 2px; }
+    .fac-status {
+      font-size: .65rem; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; border-radius: 100px; padding: 3px 9px; flex-shrink: 0;
+    }
+    .fac-status.active  { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(0,212,126,.2); }
+    .fac-status.none    { background: var(--card);        color: var(--muted);  border: 1px solid var(--cb); }
+    .fac-chevron {
+      color: var(--muted-2); font-size: .8rem; flex-shrink: 0;
+      transition: transform .28s cubic-bezier(.4,0,.2,1);
+    }
+    .fac.expanded .fac-chevron { transform: rotate(180deg); }
+
+    /* expanded body */
+    .fac-body {
+      max-height: 0; overflow: hidden;
+      transition: max-height .35s cubic-bezier(.4,0,.2,1);
+    }
+    .fac.expanded .fac-body { max-height: 600px; }
+    .fac-body-inner {
+      border-top: 1px solid var(--cb);
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    /* alert rule row */
+    .alert-rule {
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .ar-icon {
+      width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: .85rem;
+      margin-top: 2px;
+    }
+    .ar-icon.down   { background: var(--red-dim);    border: 1px solid rgba(255,64,96,.18);  }
+    .ar-icon.up     { background: var(--green-dim);  border: 1px solid rgba(0,212,126,.18);  }
+    .ar-icon.change { background: var(--yellow-dim); border: 1px solid rgba(255,180,0,.18);  }
+    .ar-content { flex: 1; }
+    .ar-label {
+      font-size: .8rem; color: var(--muted); line-height: 1.5;
+      margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .ar-label span { color: var(--white); font-weight: 500; }
+
+    /* % input + quick pick */
+    .ar-input-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pct-input-wrap {
+      display: flex; align-items: center; gap: 4px;
+      background: var(--navy-4); border: 1px solid var(--cb);
+      border-radius: 8px; padding: 6px 10px;
+      transition: border-color .2s;
+    }
+    .pct-input-wrap:focus-within { border-color: var(--blue); }
+    .pct-input {
+      background: none; border: none; outline: none;
+      color: var(--white); font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: .95rem; width: 44px; text-align: center;
+    }
+    .pct-symbol { color: var(--muted); font-size: .8rem; font-weight: 500; }
+    .quick-picks { display: flex; gap: 5px; flex-wrap: wrap; }
+    .qp {
+      padding: 5px 10px; border-radius: 7px; border: none;
+      background: var(--card); border: 1px solid var(--cb);
+      color: var(--muted); font-size: .7rem; font-weight: 600;
+      cursor: pointer; transition: all .18s;
+    }
+    .qp:hover { border-color: var(--blue-light); color: var(--blue-light); }
+    .qp.selected { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-light); }
+
+    /* toggle switch */
+    .ar-toggle-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-top: 2px; flex-shrink: 0; }
+    .toggle {
+      position: relative; width: 38px; height: 22px; cursor: pointer;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; border-radius: 11px;
+      background: var(--navy-4); border: 1px solid var(--cb);
+      transition: all .22s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      left: 2px; top: 2px;
+      background: var(--muted-2); transition: all .22s;
+    }
+    .toggle input:checked + .toggle-slider { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 10px rgba(35,96,245,.4); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); background: #fff; }
+
+    /* manager change row (no input) */
+    .alert-rule-simple {
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    /* divider inside card */
+    .fac-divider { height: 1px; background: var(--cb); margin: 0 -16px; }
+
+    /* channel selector */
+    .channel-label {
+      font-size: .68rem; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--muted-2); margin-bottom: 8px;
+    }
+    .channel-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ch-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 100px;
+      border: 1px solid var(--cb); background: var(--card);
+      font-size: .78rem; font-weight: 500; color: var(--muted);
+      cursor: pointer; transition: all .22s; user-select: none;
+    }
+    .ch-pill.selected-email     { background: var(--blue-dim);   border-color: var(--blue);        color: var(--blue-light); }
+    .ch-pill.selected-whatsapp  { background: var(--green-dim);  border-color: var(--green);       color: var(--green); }
+    .ch-pill.selected-sms       { background: var(--yellow-dim); border-color: var(--yellow);      color: var(--yellow); }
+    .ch-pill:hover:not([class*="selected"]) { border-color: var(--muted-2); color: var(--white); }
+    .ch-pill-icon { font-size: 1rem; }
+
+    /* ── EMPTY STATES ── */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center;
+      padding: 60px 32px; gap: 0;
+    }
+    .empty-icon { font-size: 2.8rem; margin-bottom: 16px; }
+    .empty-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.1rem; margin-bottom: 10px; letter-spacing: -.015em;
+    }
+    .empty-body {
+      font-size: .84rem; color: var(--muted); line-height: 1.7;
+      font-weight: 300; max-width: 280px; margin-bottom: 24px;
+    }
+    .btn-empty {
+      padding: 12px 26px; border-radius: 100px; border: none;
+      background: var(--blue); color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: all .25s;
+      box-shadow: 0 0 24px rgba(35,96,245,.4);
+    }
+    .btn-empty:hover { background: var(--blue-light); transform: translateY(-1px); }
+
+    .no-alerts-banner {
+      margin: 8px 16px 0;
+      background: rgba(35,96,245,.06); border: 1px dashed rgba(35,96,245,.2);
+      border-radius: 12px; padding: 14px 16px;
+      font-size: .8rem; color: var(--muted); line-height: 1.65;
+    }
+    .no-alerts-banner b { color: var(--blue-light); font-weight: 500; }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      display: flex; align-items: center;
+      background: rgba(11,18,32,0.97); border-top: 1px solid var(--cb);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      flex-shrink: 0;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 10px 8px; gap: 4px;
+      cursor: pointer; transition: all .2s; border: none; background: none;
+      color: var(--muted-2); font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .nav-item.active { color: var(--blue); }
+    .nav-item:hover { color: var(--muted); }
+    .nav-icon  { font-size: 1.15rem; line-height: 1; }
+    .nav-label { font-size: .6rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-dot   { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); margin-top: 2px; opacity: 0; transition: opacity .2s; }
+    .nav-item.active .nav-dot { opacity: 1; }
+
+    @keyframes fadeup {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { opacity: 0; animation: fadeup .45s forwards; }
+
+    /* desktop centering */
+    @media(min-width: 520px) {
+      .app-screen { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-screen">
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <a class="app-logo" href="../index.html"><span class="logo-dot"></span>FundPulse</a>
+    <div class="header-avatar" id="header-avatar">M</div>
+  </div>
+
+  <!-- BODY -->
+  <div class="alerts-body" id="alerts-body">
+    <!-- injected by JS -->
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="navigate('feed')">
+      <span class="nav-icon">📰</span><span class="nav-label">Feed</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item active" onclick="navigate('alerts')">
+      <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="navigate('watchlist')">
+      <span class="nav-icon">📋</span><span class="nav-label">Watchlist</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="navigate('settings')">
+      <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span><span class="nav-dot"></span>
+    </button>
+  </nav>
+</div>
+
+<script>
+// ── STATE ──
+const userName   = localStorage.getItem('fp_username') || 'Madhavan';
+const addedFunds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
+
+// alert config per fund: { fundId: { drop:{on,val}, rise:{on,val}, manager:{on}, channels:[] } }
+let alertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+
+// expanded fund id
+let expandedFund = null;
+
+// older alerts toggle
+let showingOlder = false;
+
+// ── FUND COLOURS ──
+const FUND_COLORS = {
+  'sbi-psu':    { bg:'rgba(255,64,96,.1)',   icon:'🏭' },
+  'hdfc-flexi': { bg:'rgba(35,96,245,.1)',   icon:'📊' },
+  'pp-flexi':   { bg:'rgba(0,212,126,.1)',   icon:'🌍' },
+  'quant-sc':   { bg:'rgba(255,180,0,.1)',   icon:'⚡' },
+  'mirae-lc':   { bg:'rgba(35,96,245,.1)',   icon:'🏦' },
+  'axis-bc':    { bg:'rgba(35,96,245,.1)',   icon:'📈' },
+  'icici-tech': { bg:'rgba(255,180,0,.1)',   icon:'💻' },
+  'nippon-sc':  { bg:'rgba(255,64,96,.1)',   icon:'🚀' },
+  'hdfc-nifty': { bg:'rgba(35,96,245,.1)',   icon:'📉' },
+  'motilal-mid':{ bg:'rgba(0,212,126,.1)',   icon:'🎯' },
+};
+
+// ── DEMO HISTORY (last 5, max 7 days old) ──
+const ALL_HISTORY = [
+  { type:'down',   val:'3.2%', fund:'SBI PSU Direct Fund',       time:'Today, 9:42 PM',      channel:'email',    daysAgo:0 },
+  { type:'up',     val:'2.1%', fund:'Parag Parikh Flexi Cap',    time:'Yesterday, 9:55 PM',  channel:'whatsapp', daysAgo:1 },
+  { type:'change', val:null,   fund:'Axis Bluechip Fund',         time:'2 days ago, 11:10 AM',channel:'sms',      daysAgo:2 },
+  { type:'down',   val:'1.8%', fund:'Quant Small Cap Fund',       time:'3 days ago, 9:38 PM', channel:'email',    daysAgo:3 },
+  { type:'up',     val:'3.4%', fund:'ICICI Pru Technology Fund',  time:'3 days ago, 9:51 PM', channel:'whatsapp', daysAgo:3 },
+  { type:'down',   val:'2.1%', fund:'Nippon India Small Cap',     time:'5 days ago, 9:44 PM', channel:'email',    daysAgo:5 },
+  { type:'up',     val:'1.1%', fund:'HDFC Nifty 50 Index Fund',   time:'6 days ago, 9:30 PM', channel:'sms',      daysAgo:6 },
+];
+const RECENT_HISTORY = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(0,5);
+const OLDER_HISTORY  = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(5);
+
+// ── INIT ──
+function init() {
+  document.getElementById('header-avatar').textContent = userName.charAt(0).toUpperCase();
+
+  // ensure every added fund has a config entry — all OFF by default
+  addedFunds.forEach(f => {
+    if (!alertConfig[f.id]) {
+      alertConfig[f.id] = {
+        drop:    { on: false, val: '3'  },
+        rise:    { on: false, val: '2'  },
+        manager: { on: false },
+        channels: ['email'],
+      };
+    }
+  });
+  saveConfig();
+  render();
+}
+
+function saveConfig(fundId) {
+  localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
+  // also write to Supabase in background
+  if (fundId && alertConfig[fundId]) {
+    saveAlertConfig(fundId, alertConfig[fundId]);
+  }
+}
+
+// ── RENDER ──
+function render() {
+  const body = document.getElementById('alerts-body');
+
+  // EMPTY STATE — no funds added at all
+  if (!addedFunds.length) {
+    body.innerHTML = `
+      <div class="empty-state fade-in">
+        <div class="empty-icon">🔕</div>
+        <div class="empty-title">No funds on your watchlist</div>
+        <p class="empty-body">Add funds first to set up alerts. FundPulse will then watch them and notify you when something moves.</p>
+        <button class="btn-empty" onclick="navigate('feed')">Add Funds →</button>
+      </div>`;
+    return;
+  }
+
+  // check if any alert is configured
+  const anyAlertOn = addedFunds.some(f => {
+    const c = alertConfig[f.id];
+    return c && (c.drop.on || c.rise.on || c.manager.on);
+  });
+
+  let html = '';
+
+  // PAGE TITLE
+  html += `
+    <div class="page-title-row fade-in">
+      <div>
+        <div class="page-title">Alerts</div>
+        <div class="page-subtitle">Tap a fund to configure when we notify you</div>
+      </div>
+    </div>`;
+
+  // NO ALERTS CONFIGURED BANNER
+  if (!anyAlertOn) {
+    html += `
+      <div class="no-alerts-banner fade-in">
+        <b>Your funds are being tracked, but no alerts are set.</b> Tap any fund below to configure when FundPulse should notify you.
+      </div>`;
+  }
+
+  // HISTORY SECTION (only if alerts exist)
+  if (anyAlertOn && RECENT_HISTORY.length) {
+    html += `<span class="section-lbl fade-in">Recent Alerts</span>`;
+    html += `<div class="history-list fade-in">`;
+    html += RECENT_HISTORY.map(h => historyItemHTML(h)).join('');
+    html += `</div>`;
+    if (OLDER_HISTORY.length) {
+      html += `<div class="see-older" onclick="toggleOlder()">${showingOlder ? '▲ Hide older alerts' : '▾ See older alerts'}</div>`;
+      if (showingOlder) {
+        html += `<div class="history-list fade-in" style="margin-top:4px;">`;
+        html += OLDER_HISTORY.map(h => historyItemHTML(h)).join('');
+        html += `</div>`;
+      }
+    }
+  }
+
+  // FUND ALERT CARDS
+  html += `<span class="section-lbl fade-in">My Funds</span>`;
+  html += `<div class="fund-alerts-list">`;
+  addedFunds.forEach((f, i) => {
+    html += fundCardHTML(f, i);
+  });
+  html += `</div>`;
+  html += `<div style="height:16px;"></div>`;
+
+  body.innerHTML = html;
+}
+
+// ── HISTORY ITEM ──
+function historyItemHTML(h) {
+  const icons = { down:'📉', up:'📈', change:'👤' };
+  const labels = {
+    down:   `Unit price dropped <b class="down">−${h.val}</b>`,
+    up:     `Unit price rose <b class="up">+${h.val}</b>`,
+    change: `<b class="change">Fund manager changed</b>`,
+  };
+  const chClass = { email:'ch-email', whatsapp:'ch-whatsapp', sms:'ch-sms' };
+  const chLabel = { email:'Email', whatsapp:'WhatsApp', sms:'SMS' };
+  return `
+    <div class="history-item">
+      <div class="hi-icon ${h.type}">${icons[h.type]}</div>
+      <div class="hi-body">
+        <div class="hi-title">${labels[h.type]}</div>
+        <div class="hi-fund">${h.fund}</div>
+      </div>
+      <span class="hi-channel ${chClass[h.channel]}">${chLabel[h.channel]}</span>
+      <div class="hi-time">${h.time.split(',')[0]}</div>
+    </div>`;
+}
+
+// ── FUND CARD ──
+function fundCardHTML(fund, idx) {
+  const cfg = alertConfig[fund.id];
+  const isExpanded = expandedFund === fund.id;
+  const activeCount = [cfg.drop.on, cfg.rise.on, cfg.manager.on].filter(Boolean).length;
+  const fcolor = FUND_COLORS[fund.id] || { bg:'rgba(35,96,245,.1)', icon:'📊' };
+
+  const statusLabel = activeCount > 0
+    ? `${activeCount} alert${activeCount > 1 ? 's' : ''} on`
+    : 'No alerts';
+  const statusClass = activeCount > 0 ? 'active' : 'none';
+
+  return `
+    <div class="fac ${isExpanded ? 'expanded' : ''}" id="fac-${fund.id}" style="animation:fadeup .4s ${idx*0.07}s both;">
+      <div class="fac-header" onclick="toggleFund('${fund.id}')">
+        <div class="fac-icon" style="background:${fcolor.bg}; border:1px solid rgba(255,255,255,.08);">${fcolor.icon}</div>
+        <div class="fac-info">
+          <div class="fac-name">${fund.name}</div>
+          <div class="fac-meta">${fund.cat} · ${fund.amc}</div>
+        </div>
+        <span class="fac-status ${statusClass}">${statusLabel}</span>
+        <span class="fac-chevron">▼</span>
+      </div>
+      <div class="fac-body">
+        <div class="fac-body-inner">
+
+          <!-- DROP ALERT -->
+          <div class="alert-rule">
+            <div class="ar-icon down">📉</div>
+            <div class="ar-content">
+              <div class="ar-label">Notify me if unit price drops more than <span>${cfg.drop.val}%</span></div>
+              <div class="ar-input-row">
+                <div class="pct-input-wrap">
+                  <input class="pct-input" type="number" min="0.1" max="50" step="0.1"
+                    value="${cfg.drop.val}"
+                    onchange="updateVal('${fund.id}','drop',this.value)"
+                    oninput="syncQuickPick('${fund.id}','drop',this.value)"
+                    id="inp-${fund.id}-drop"/>
+                  <span class="pct-symbol">%</span>
+                </div>
+                <div class="quick-picks">
+                  ${[1,2,3,5,10].map(v=>`<button class="qp ${parseFloat(cfg.drop.val)===v?'selected':''}"
+                    onclick="quickPick('${fund.id}','drop',${v})">${v}%</button>`).join('')}
+                </div>
+              </div>
+            </div>
+            <div class="ar-toggle-wrap">
+              <label class="toggle">
+                <input type="checkbox" ${cfg.drop.on?'checked':''} onchange="toggleAlert('${fund.id}','drop',this.checked)"/>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- RISE ALERT -->
+          <div class="alert-rule">
+            <div class="ar-icon up">📈</div>
+            <div class="ar-content">
+              <div class="ar-label">Notify me if unit price rises more than <span>${cfg.rise.val}%</span></div>
+              <div class="ar-input-row">
+                <div class="pct-input-wrap">
+                  <input class="pct-input" type="number" min="0.1" max="50" step="0.1"
+                    value="${cfg.rise.val}"
+                    onchange="updateVal('${fund.id}','rise',this.value)"
+                    oninput="syncQuickPick('${fund.id}','rise',this.value)"
+                    id="inp-${fund.id}-rise"/>
+                  <span class="pct-symbol">%</span>
+                </div>
+                <div class="quick-picks">
+                  ${[1,2,3,5,10].map(v=>`<button class="qp ${parseFloat(cfg.rise.val)===v?'selected':''}"
+                    onclick="quickPick('${fund.id}','rise',${v})">${v}%</button>`).join('')}
+                </div>
+              </div>
+            </div>
+            <div class="ar-toggle-wrap">
+              <label class="toggle">
+                <input type="checkbox" ${cfg.rise.on?'checked':''} onchange="toggleAlert('${fund.id}','rise',this.checked)"/>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- MANAGER CHANGE -->
+          <div class="alert-rule-simple">
+            <div class="ar-icon change">👤</div>
+            <div style="flex:1;">
+              <div style="font-size:.82rem;color:var(--white);font-weight:500;">Fund manager change</div>
+              <div style="font-size:.7rem;color:var(--muted);margin-top:2px;">Alert me the day a manager change is announced</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" ${cfg.manager.on?'checked':''} onchange="toggleAlert('${fund.id}','manager',this.checked)"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="fac-divider"></div>
+
+          <!-- CHANNEL SELECTOR -->
+          <div>
+            <div class="channel-label">Notify me via</div>
+            <div class="channel-pills">
+              <div class="ch-pill ${cfg.channels.includes('email')?'selected-email':''}"
+                onclick="toggleChannel('${fund.id}','email')">
+                <span class="ch-pill-icon">✉️</span> Email
+              </div>
+              <div class="ch-pill ${cfg.channels.includes('whatsapp')?'selected-whatsapp':''}"
+                onclick="toggleChannel('${fund.id}','whatsapp')">
+                <span class="ch-pill-icon">💬</span> WhatsApp
+              </div>
+              <div class="ch-pill ${cfg.channels.includes('sms')?'selected-sms':''}"
+                onclick="toggleChannel('${fund.id}','sms')">
+                <span class="ch-pill-icon">📱</span> SMS
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── INTERACTIONS ──
+function toggleFund(id) {
+  expandedFund = expandedFund === id ? null : id;
+  render();
+  // scroll expanded card into view
+  if (expandedFund) {
+    setTimeout(() => {
+      const el = document.getElementById(`fac-${id}`);
+      if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }, 360);
+  }
+}
+
+function toggleAlert(fundId, type, checked) {
+  alertConfig[fundId][type].on = checked;
+  saveConfig(fundId);
+  // update status badge without full re-render
+  updateStatusBadge(fundId);
+}
+
+function updateVal(fundId, type, val) {
+  const clean = parseFloat(val);
+  if (isNaN(clean) || clean <= 0) return;
+  alertConfig[fundId][type].val = String(clean);
+  saveConfig(fundId);
+  // update label inline
+  const label = document.querySelector(`#fac-${fundId} .ar-icon.${type}`)
+    ?.closest('.alert-rule')?.querySelector('.ar-label span');
+  if (label) label.textContent = clean + '%';
+}
+
+function syncQuickPick(fundId, type, val) {
+  const clean = parseFloat(val);
+  const qps = document.querySelectorAll(`#fac-${fundId} .ar-icon.${type}`)
+    [0]?.closest('.alert-rule')?.querySelectorAll('.qp');
+  if (!qps) return;
+  qps.forEach(btn => {
+    btn.classList.toggle('selected', parseFloat(btn.textContent) === clean);
+  });
+  updateVal(fundId, type, val);
+}
+
+function quickPick(fundId, type, val) {
+  alertConfig[fundId][type].val = String(val);
+  saveConfig(fundId);
+  // update input field
+  const inp = document.getElementById(`inp-${fundId}-${type}`);
+  if (inp) inp.value = val;
+  // update quick pick highlight
+  syncQuickPick(fundId, type, val);
+  // update label
+  const label = document.querySelector(`#fac-${fundId} .ar-icon.${type}`)
+    ?.closest('.alert-rule')?.querySelector('.ar-label span');
+  if (label) label.textContent = val + '%';
+}
+
+function toggleChannel(fundId, channel) {
+  const cfg = alertConfig[fundId];
+  const idx = cfg.channels.indexOf(channel);
+  if (idx > -1) {
+    // prevent deselecting all channels
+    if (cfg.channels.length === 1) return;
+    cfg.channels.splice(idx, 1);
+  } else {
+    cfg.channels.push(channel);
+  }
+  saveConfig(fundId);
+  // update pills inline without full re-render
+  const card = document.getElementById(`fac-${fundId}`);
+  if (!card) return;
+  const pills = card.querySelectorAll('.ch-pill');
+  const channels = ['email','whatsapp','sms'];
+  pills.forEach((pill, i) => {
+    const ch = channels[i];
+    pill.className = 'ch-pill' + (cfg.channels.includes(ch) ? ` selected-${ch}` : '');
+  });
+}
+
+function updateStatusBadge(fundId) {
+  const cfg = alertConfig[fundId];
+  const count = [cfg.drop.on, cfg.rise.on, cfg.manager.on].filter(Boolean).length;
+  const badge = document.querySelector(`#fac-${fundId} .fac-status`);
+  if (!badge) return;
+  badge.textContent = count > 0 ? `${count} alert${count>1?'s':''} on` : 'No alerts';
+  badge.className   = `fac-status ${count > 0 ? 'active' : 'none'}`;
+}
+
+function toggleOlder() {
+  showingOlder = !showingOlder;
+  render();
+}
+
+// ── NAVIGATION ──
+function navigate(tab) {
+  const paths = {
+    feed:      'feed.html',
+    alerts:    'alerts.html',
+    watchlist: 'watchlist.html',
+    settings:  'settings.html',
+  };
+  if (tab !== 'alerts') window.location.href = paths[tab] || 'feed.html';
+}
+
+// ── BOOT ──
+// Read expand flag immediately
+const expandOnLoad = localStorage.getItem('fp_expand_fund');
+if (expandOnLoad) {
+  expandedFund = expandOnLoad;
+  localStorage.removeItem('fp_expand_fund');
+}
+
+async function boot() {
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  // load from localStorage first — instant render, no flicker
+  const savedFunds = localStorage.getItem('fp_funds');
+  if (savedFunds) { try { addedFunds = JSON.parse(savedFunds); } catch(e) {} }
+  const savedConfig = localStorage.getItem('fp_alert_config');
+  if (savedConfig) { try { alertConfig = JSON.parse(savedConfig); } catch(e) {} }
+
+  // render immediately with local data
+  init();
+
+  // sync Supabase in background
+  const rows = await fetchWatchlist();
+  if (rows.length) {
+    addedFunds = rows.map(r => ({
+      id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
+    }));
+    localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+  }
+  const sbConfig = await fetchAlertConfig();
+  if (Object.keys(sbConfig).length) {
+    alertConfig = sbConfig;
+    localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
+    render(); // re-render silently with fresh data
+  }
+}
+
+// wait for supabase.js to signal ready, then boot
+window.addEventListener('supabase_ready', boot, { once: true });
+// if SDK already loaded (cached), fire immediately
+if (window._supabase) { setTimeout(boot, 0); }
+</script>
+</body>
+</html>

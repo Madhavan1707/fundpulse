@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FundPulse — News Feed</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <script src="supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:       #070c18;
+      --navy-2:     #0b1220;
+      --navy-3:     #0f1a2e;
+      --navy-4:     #142038;
+      --blue:       #2360f5;
+      --blue-light: #4a7cff;
+      --blue-dim:   rgba(35,96,245,0.12);
+      --green:      #00d47e;
+      --green-dim:  rgba(0,212,126,0.12);
+      --red:        #ff4060;
+      --red-dim:    rgba(255,64,96,0.12);
+      --yellow:     #ffb400;
+      --white:      #edf2ff;
+      --muted:      #7a8fb0;
+      --muted-2:    #4a5878;
+      --card:       rgba(255,255,255,0.04);
+      --cb:         rgba(255,255,255,0.08);
+    }
+    html, body { height: 100%; }
+    body {
+      background: var(--navy); color: var(--white);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 400; overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SCREENS ── */
+    .screen {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      opacity: 0; pointer-events: none; transition: opacity 0.4s ease; overflow: hidden;
+    }
+    .screen.active { opacity: 1; pointer-events: all; }
+
+    /* ── SHARED HEADER ── */
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--cb);
+      background: rgba(7,12,24,0.96);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      flex-shrink: 0; position: relative; z-index: 10;
+    }
+    .app-logo {
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem;
+      letter-spacing: -.02em; display: flex; align-items: center; gap: 8px;
+      color: var(--white); text-decoration: none;
+    }
+    .logo-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--blue);
+      box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(35,96,245,.5);
+      animation: dp 2.2s ease-in-out infinite;
+    }
+    @keyframes dp {
+      0%,100%{box-shadow:0 0 6px var(--blue),0 0 14px rgba(35,96,245,.4);}
+      50%{box-shadow:0 0 14px var(--blue),0 0 28px rgba(35,96,245,.6);}
+    }
+    .header-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), #0a1f5c);
+      border: 1.5px solid rgba(35,96,245,.4);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif; font-weight: 700;
+      font-size: .78rem; color: var(--white); cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .header-avatar:hover { transform: scale(1.08); box-shadow: 0 0 16px rgba(35,96,245,.5); }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      display: flex; align-items: center;
+      background: rgba(11,18,32,0.97); border-top: 1px solid var(--cb);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      flex-shrink: 0;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 10px 8px; gap: 4px;
+      cursor: pointer; transition: all .2s; border: none; background: none;
+      color: var(--muted-2); font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .nav-item.active { color: var(--blue); }
+    .nav-item:hover { color: var(--muted); }
+    .nav-icon { font-size: 1.15rem; line-height: 1; }
+    .nav-label { font-size: .6rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); margin-top: 2px; opacity: 0; transition: opacity .2s; }
+    .nav-item.active .nav-dot { opacity: 1; }
+
+    @keyframes fadeup {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ══════════════════════════
+       ONBOARDING SCREEN
+    ══════════════════════════ */
+    #screen-onboard { background: var(--navy); justify-content: flex-start; }
+    .onboard-body { flex: 1; overflow-y: auto; padding: 32px 20px 24px; display: flex; flex-direction: column; }
+    .onboard-body::-webkit-scrollbar { display: none; }
+
+    .onboard-greeting { margin-bottom: 28px; opacity: 0; animation: fadeup .5s .1s forwards; }
+    .onboard-wave { font-size: 2rem; margin-bottom: 10px; display: block; }
+    .onboard-name {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: clamp(1.7rem, 6vw, 2.2rem); letter-spacing: -.03em; line-height: 1.1; margin-bottom: 10px;
+    }
+    .onboard-name span { color: var(--blue-light); }
+    .onboard-tagline { font-size: .92rem; color: var(--muted); line-height: 1.65; font-weight: 300; max-width: 340px; }
+
+    .onboard-section-label {
+      font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--blue-light); margin-bottom: 10px; display: block;
+      opacity: 0; animation: fadeup .5s .25s forwards;
+    }
+
+    /* search */
+    .search-wrap { position: relative; margin-bottom: 16px; opacity: 0; animation: fadeup .5s .35s forwards; }
+    .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted-2); font-size: .95rem; pointer-events: none; }
+    .search-input {
+      width: 100%; background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 12px; padding: 13px 14px 13px 40px;
+      color: var(--white); font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: .9rem; outline: none; transition: border-color .22s;
+    }
+    .search-input::placeholder { color: var(--muted-2); }
+    .search-input:focus { border-color: var(--blue); }
+
+    .search-results {
+      background: var(--navy-3); border: 1px solid var(--cb); border-radius: 12px;
+      margin-top: 6px; overflow: hidden; display: none; position: relative; z-index: 20;
+    }
+    .search-results.show { display: block; }
+    .search-result-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px; cursor: pointer; transition: background .18s;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover:not(.is-added) { background: rgba(35,96,245,.08); }
+    .search-result-item.is-added { cursor: default; }
+    .sri-name { font-size: .84rem; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+    .sri-meta { font-size: .7rem; color: var(--muted); }
+    .sri-added-check {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      background: var(--green-dim); border: 1px solid rgba(0,212,126,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .65rem; color: var(--green);
+    }
+
+    /* added funds */
+    .added-funds-label {
+      font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted-2); margin-bottom: 10px; display: none;
+    }
+    .added-funds-label.show { display: block; }
+    .added-funds-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+
+    /* fund chip — hover reveals X button */
+    .added-fund-chip {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--navy-3); border: 1px solid rgba(0,212,126,.2);
+      border-radius: 11px; padding: 11px 14px;
+      animation: fadeup .3s forwards; position: relative;
+      transition: border-color .25s;
+    }
+    .added-fund-chip:hover { border-color: rgba(255,64,96,.3); }
+    .afc-left { display: flex; align-items: center; gap: 10px; }
+    .afc-check {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--green-dim); border: 1px solid rgba(0,212,126,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .65rem; color: var(--green); flex-shrink: 0;
+      transition: all .22s;
+    }
+    .added-fund-chip:hover .afc-check {
+      background: var(--red-dim); border-color: rgba(255,64,96,.3); color: var(--red);
+    }
+    .afc-name { font-size: .82rem; font-weight: 500; color: var(--white); }
+    .afc-cat { font-size: .68rem; color: var(--muted); margin-top: 1px; }
+    .afc-remove {
+      background: var(--red-dim); border: 1px solid rgba(255,64,96,.25);
+      border-radius: 50%; width: 24px; height: 24px;
+      color: var(--red); font-size: .72rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transform: scale(0.6);
+      transition: opacity .22s, transform .22s;
+      flex-shrink: 0;
+    }
+    .added-fund-chip:hover .afc-remove { opacity: 1; transform: scale(1); }
+    .afc-remove:hover { background: var(--red); color: #fff; transform: scale(1.12) !important; }
+
+    /* actions */
+    .onboard-actions { margin-top: auto; padding-top: 16px; opacity: 0; animation: fadeup .5s .5s forwards; }
+    .btn-continue {
+      width: 100%; padding: 14px; border-radius: 12px; border: none;
+      background: var(--blue); color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .95rem; font-weight: 600;
+      cursor: pointer; transition: all .28s; box-shadow: 0 0 28px rgba(35,96,245,.4);
+      opacity: .35; pointer-events: none;
+    }
+    .btn-continue.ready { opacity: 1; pointer-events: all; }
+    .btn-continue.ready:hover { background: var(--blue-light); transform: translateY(-1px); }
+    .skip-line {
+      text-align: center; margin-top: 14px; font-size: .78rem;
+      color: var(--muted-2); line-height: 1.6; cursor: pointer; transition: color .2s;
+    }
+    .skip-line:hover { color: var(--muted); }
+    .skip-line u { text-decoration-color: var(--muted-2); }
+
+    /* ══════════════════════════
+       ALL SET SCREEN
+    ══════════════════════════ */
+    #screen-allset {
+      background: var(--navy); align-items: center;
+      justify-content: center; text-align: center; padding: 40px 28px;
+    }
+    .allset-inner { max-width: 320px; }
+    .allset-icon { font-size: 3.5rem; margin-bottom: 20px; display: block; animation: popIn .5s cubic-bezier(.34,1.56,.64,1) forwards; }
+    @keyframes popIn { from{transform:scale(0.3);opacity:0;} to{transform:scale(1);opacity:1;} }
+    .allset-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: clamp(1.6rem, 6vw, 2rem); letter-spacing: -.025em;
+      margin-bottom: 12px; opacity: 0; animation: fadeup .5s .2s forwards;
+    }
+    .allset-title span { color: var(--green); }
+    .allset-sub {
+      font-size: .88rem; color: var(--muted); line-height: 1.7; font-weight: 300;
+      margin-bottom: 28px; opacity: 0; animation: fadeup .5s .35s forwards;
+    }
+    .allset-chips { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; opacity: 0; animation: fadeup .5s .5s forwards; }
+    .allset-chip { background: var(--navy-3); border: 1px solid var(--cb); border-radius: 100px; padding: 6px 14px; font-size: .72rem; color: var(--muted); }
+    .allset-chip b { color: var(--white); font-weight: 500; }
+    .btn-allset {
+      width: 100%; padding: 14px; border-radius: 12px; border: none;
+      background: var(--blue); color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .95rem; font-weight: 600;
+      cursor: pointer; transition: all .28s; box-shadow: 0 0 28px rgba(35,96,245,.4);
+      opacity: 0; animation: fadeup .5s .6s forwards;
+    }
+    .btn-allset:hover { background: var(--blue-light); transform: translateY(-2px); }
+
+    /* ══════════════════════════
+       NEWS FEED SCREEN
+    ══════════════════════════ */
+    #screen-feed { background: var(--navy); }
+    .feed-body { flex: 1; overflow-y: auto; }
+    .feed-body::-webkit-scrollbar { width: 3px; }
+    .feed-body::-webkit-scrollbar-track { background: transparent; }
+    .feed-body::-webkit-scrollbar-thumb { background: var(--navy-4); border-radius: 3px; }
+
+    /* filter bar */
+    .feed-filter-bar {
+      display: flex; align-items: center;
+      border-bottom: 1px solid var(--cb);
+      background: rgba(7,12,24,.85); backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 5; flex-shrink: 0;
+    }
+    .feed-filters {
+      display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; flex: 1;
+    }
+    .feed-filters::-webkit-scrollbar { display: none; }
+    .filter-chip {
+      padding: 6px 14px; border-radius: 100px; white-space: nowrap;
+      border: 1px solid var(--cb); background: var(--card);
+      color: var(--muted); font-size: .72rem; font-weight: 600;
+      cursor: pointer; transition: all .2s; flex-shrink: 0;
+      display: flex; align-items: center; gap: 6px; position: relative;
+    }
+    .filter-chip.active { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 0 14px rgba(35,96,245,.35); }
+    .filter-chip:hover:not(.active):not(.removable) { border-color: var(--muted-2); color: var(--white); }
+
+    /* removable fund filter chip */
+    .filter-chip.removable { padding-right: 8px; }
+    .filter-chip.removable:hover { border-color: rgba(255,64,96,.35); color: var(--white); background: rgba(255,64,96,.07); }
+    .fc-remove {
+      width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,64,96,.15); border: 1px solid rgba(255,64,96,.25);
+      color: var(--red); font-size: .55rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transform: scale(0.5);
+      transition: opacity .2s, transform .2s;
+    }
+    .filter-chip.removable:hover .fc-remove { opacity: 1; transform: scale(1); }
+    .fc-remove:hover { background: var(--red) !important; color: #fff !important; }
+
+    /* add funds button in filter bar */
+    .add-funds-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 12px; margin-right: 12px; flex-shrink: 0;
+      border: 1px dashed rgba(35,96,245,.4); border-radius: 100px;
+      background: var(--blue-dim); color: var(--blue-light);
+      font-size: .72rem; font-weight: 600; cursor: pointer;
+      transition: all .22s; white-space: nowrap;
+    }
+    .add-funds-btn:hover { background: var(--blue); color: #fff; border-style: solid; }
+
+    /* last updated bar */
+    .last-updated-bar {
+      padding: 7px 16px; font-size: .65rem; color: var(--muted-2);
+      border-bottom: 1px solid rgba(255,255,255,.04);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .lu-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px var(--green); animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+    /* pull to refresh */
+    .ptr-indicator {
+      text-align: center; padding: 14px; font-size: .75rem; color: var(--muted-2);
+      display: none; align-items: center; justify-content: center; gap: 8px;
+    }
+    .ptr-indicator.show { display: flex; }
+    .ptr-spinner {
+      width: 14px; height: 14px; border: 2px solid var(--cb);
+      border-top-color: var(--blue); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* feed header row */
+    .feed-header-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 16px 4px;
+    }
+    .feed-greeting-text { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1rem; letter-spacing: -.01em; }
+    .feed-date { font-size: .7rem; color: var(--muted-2); }
+
+    /* all-news banner */
+    .all-news-banner {
+      margin: 12px 16px 4px;
+      background: rgba(35,96,245,.06); border: 1px dashed rgba(35,96,245,.2);
+      border-radius: 12px; padding: 12px 16px;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .anb-text { font-size: .78rem; color: var(--muted); line-height: 1.6; }
+    .anb-text b { color: var(--blue-light); font-weight: 500; }
+    .anb-btn {
+      background: var(--blue); border: none; border-radius: 8px; padding: 7px 13px; color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .72rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background .2s;
+    }
+    .anb-btn:hover { background: var(--blue-light); }
+
+    /* news list */
+    .news-list { display: flex; flex-direction: column; padding: 10px 16px; gap: 0; }
+
+    /* ── SWIPEABLE CARD WRAPPER ── */
+    .swipe-wrapper {
+      position: relative; margin-bottom: 10px; border-radius: 14px;
+      overflow: hidden; user-select: none;
+    }
+    /* behind-card action reveals */
+    .swipe-action {
+      position: absolute; top: 0; bottom: 0; width: 80px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    }
+    .swipe-action-left { left: 0; background: rgba(255,180,0,.15); color: var(--yellow); border-radius: 14px 0 0 14px; }
+    .swipe-action-right { right: 0; background: rgba(255,64,96,.12); color: var(--red); border-radius: 0 14px 14px 0; }
+    .swipe-action-icon { font-size: 1.3rem; }
+
+    /* NEWS CARD */
+    .news-card {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 14px; padding: 16px; cursor: pointer;
+      transition: border-color .22s, box-shadow .22s;
+      position: relative; overflow: hidden;
+      transform: translateX(0); transition: transform .25s ease;
+      will-change: transform;
+    }
+    .news-card:hover { border-color: rgba(35,96,245,.22); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+    .news-card.swiping { transition: none; }
+    .news-card.snap-back { transition: transform .3s cubic-bezier(.4,0,.2,1); }
+    .news-card.dismissed {
+      opacity: 0; transform: translateX(110%) !important;
+      transition: opacity .3s, transform .3s;
+    }
+    .news-card.bookmarked-anim { animation: flashBookmark .4s ease; }
+    @keyframes flashBookmark {
+      0%,100%{ border-color: var(--cb); }
+      50%{ border-color: var(--yellow); box-shadow: 0 0 16px rgba(255,180,0,.3); }
+    }
+
+    /* unread dot */
+    .unread-dot {
+      position: absolute; top: 14px; right: 14px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--blue); box-shadow: 0 0 6px rgba(35,96,245,.6);
+      transition: opacity .3s;
+    }
+    .news-card.read .unread-dot { opacity: 0; }
+
+    /* bookmark indicator */
+    .bookmark-tag {
+      position: absolute; top: 0; left: 0;
+      background: var(--yellow); color: var(--navy);
+      font-size: .55rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 14px 0 8px 0; display: none;
+    }
+    .news-card.is-bookmarked .bookmark-tag { display: block; }
+
+    .news-card-top {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; margin-bottom: 10px; padding-right: 16px;
+    }
+    .news-fund-tag {
+      font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+      border-radius: 100px; padding: 3px 9px; flex-shrink: 0;
+    }
+    .tag-blue   { background: var(--blue-dim);           color: var(--blue-light); border: 1px solid rgba(35,96,245,.2); }
+    .tag-green  { background: var(--green-dim);          color: var(--green);      border: 1px solid rgba(0,212,126,.2); }
+    .tag-red    { background: var(--red-dim);            color: var(--red);        border: 1px solid rgba(255,64,96,.2); }
+    .tag-yellow { background: rgba(255,180,0,.1);        color: var(--yellow);     border: 1px solid rgba(255,180,0,.2); }
+    .tag-all    { background: rgba(255,255,255,.06);     color: var(--muted);      border: 1px solid var(--cb); }
+    .news-time  { font-size: .65rem; color: var(--muted-2); white-space: nowrap; }
+    .news-headline {
+      font-family: 'Outfit', sans-serif; font-weight: 600; font-size: .9rem;
+      line-height: 1.4; letter-spacing: -.01em; color: var(--white); margin-bottom: 8px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .news-source { font-size: .7rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .news-source-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--muted-2); }
+    .news-alert-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--red-dim); border: 1px solid rgba(255,64,96,.2);
+      border-radius: 100px; padding: 3px 9px; margin-top: 8px;
+      font-size: .62rem; color: var(--red); font-weight: 600;
+    }
+    .news-alert-badge.positive { background: var(--green-dim); border-color: rgba(0,212,126,.2); color: var(--green); }
+
+    /* shimmer */
+    .shimmer-list { display: flex; flex-direction: column; padding: 10px 16px; gap: 10px; }
+    .shimmer-card { background: var(--navy-3); border: 1px solid var(--cb); border-radius: 14px; padding: 16px; }
+    .sh { background: linear-gradient(90deg, var(--navy-3) 25%, var(--navy-4) 50%, var(--navy-3) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; height: 10px; margin-bottom: 8px; }
+    @keyframes shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+
+    /* ── CONFIRM MODAL ── */
+    .confirm-overlay {
+      position: fixed; inset: 0; z-index: 400;
+      background: rgba(4,9,18,.8); backdrop-filter: blur(12px);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .confirm-overlay.open { opacity: 1; pointer-events: all; }
+    .confirm-modal {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 18px; padding: 28px 24px; width: 100%; max-width: 340px;
+      transform: scale(.94); transition: transform .28s cubic-bezier(.34,1.56,.64,1);
+    }
+    .confirm-overlay.open .confirm-modal { transform: scale(1); }
+    .confirm-icon { font-size: 2rem; margin-bottom: 12px; display: block; text-align: center; }
+    .confirm-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; text-align: center; margin-bottom: 8px; }
+    .confirm-body { font-size: .82rem; color: var(--muted); line-height: 1.65; text-align: center; margin-bottom: 22px; }
+    .confirm-body b { color: var(--white); font-weight: 500; }
+    .confirm-actions { display: flex; gap: 10px; }
+    .confirm-keep {
+      flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--cb);
+      background: transparent; color: var(--white);
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+    }
+    .confirm-keep:hover { background: rgba(255,255,255,.06); }
+    .confirm-remove {
+      flex: 1; padding: 12px; border-radius: 10px; border: none;
+      background: var(--red-dim); color: var(--red);
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: all .2s; border: 1px solid rgba(255,64,96,.2);
+    }
+    .confirm-remove:hover { background: var(--red); color: #fff; }
+
+    /* ── ARTICLE SHEET ── */
+    .article-sheet {
+      position: fixed; inset: 0; z-index: 300;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      pointer-events: none;
+    }
+    .article-overlay {
+      position: absolute; inset: 0; background: rgba(4,9,18,.7);
+      backdrop-filter: blur(8px); opacity: 0; transition: opacity .3s; cursor: pointer;
+    }
+    .article-sheet.open .article-overlay { opacity: 1; pointer-events: all; }
+    .article-card {
+      position: relative; z-index: 1; background: var(--navy-3);
+      border-radius: 20px 20px 0 0; border-top: 1px solid var(--cb);
+      padding: 20px 20px 36px;
+      transform: translateY(100%); transition: transform .35s cubic-bezier(.4,0,.2,1);
+      max-height: 75vh; overflow-y: auto;
+    }
+    .article-sheet.open .article-card { transform: translateY(0); pointer-events: all; }
+    .article-card::-webkit-scrollbar { display: none; }
+    .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--cb); margin: 0 auto 18px; }
+    .sheet-tag-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .sheet-headline { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.05rem; line-height: 1.4; letter-spacing: -.01em; margin-bottom: 10px; }
+    .sheet-meta { font-size: .72rem; color: var(--muted); margin-bottom: 16px; }
+    .sheet-summary { font-size: .84rem; color: var(--muted); line-height: 1.75; font-weight: 300; }
+    .sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .sheet-read-btn {
+      flex: 1; padding: 13px; border-radius: 10px; border: none;
+      background: var(--blue); color: #fff; text-align: center;
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; transition: background .2s; display: block;
+    }
+    .sheet-read-btn:hover { background: var(--blue-light); }
+    .sheet-bookmark-btn {
+      padding: 13px 18px; border-radius: 10px; border: 1px solid var(--cb);
+      background: transparent; color: var(--muted); font-size: 1rem;
+      cursor: pointer; transition: all .2s;
+    }
+    .sheet-bookmark-btn:hover { border-color: var(--yellow); color: var(--yellow); }
+    .sheet-bookmark-btn.active { background: rgba(255,180,0,.1); border-color: rgba(255,180,0,.3); color: var(--yellow); }
+
+    /* desktop centering */
+    @media(min-width: 520px) {
+      .screen { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+      .article-sheet, .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ SCREEN 1: ONBOARDING ══ -->
+<div class="screen active" id="screen-onboard">
+  <div class="app-header">
+    <a class="app-logo" href="#"><span class="logo-dot"></span>FundPulse</a>
+    <div class="header-avatar" id="onboard-avatar">M</div>
+  </div>
+  <div class="onboard-body">
+    <div class="onboard-greeting">
+      <span class="onboard-wave">👋</span>
+      <h1 class="onboard-name">Welcome, <span id="user-name-display">there</span>.</h1>
+      <p class="onboard-tagline">Your funds finally have someone watching over them. Let's start by adding the ones you care about.</p>
+    </div>
+    <span class="onboard-section-label">Search &amp; add funds</span>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" type="text" id="fund-search" placeholder="Try 'SBI PSU', 'HDFC Flexi'..." autocomplete="off"/>
+      <div class="search-results" id="search-results"></div>
+    </div>
+    <div class="added-funds-label" id="added-label">Added to your watchlist</div>
+    <div class="added-funds-list" id="added-funds-list"></div>
+    <div class="onboard-actions">
+      <button class="btn-continue" id="btn-continue" onclick="goAllSet()">Continue to your feed →</button>
+      <p class="skip-line" onclick="skipOnboard()">
+        <u>Skip for now</u> — you'll see news for all funds, but it'll be noisy.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 2: ALL SET ══ -->
+<div class="screen" id="screen-allset">
+  <div class="allset-inner">
+    <span class="allset-icon">🎯</span>
+    <h2 class="allset-title">You're all set, <span id="allset-name">there</span>!</h2>
+    <p class="allset-sub" id="allset-message"></p>
+    <div class="allset-chips" id="allset-chips"></div>
+    <button class="btn-allset" onclick="goFeed()">Take me to my feed →</button>
+  </div>
+</div>
+
+<!-- ══ SCREEN 3: NEWS FEED ══ -->
+<div class="screen" id="screen-feed">
+  <div class="app-header">
+    <a class="app-logo" href="#"><span class="logo-dot"></span>FundPulse</a>
+    <div class="header-avatar" id="feed-avatar" onclick="openProfile()">M</div>
+  </div>
+
+  <!-- filter bar + add funds button -->
+  <div class="feed-filter-bar">
+    <div class="feed-filters" id="feed-filters">
+      <div class="filter-chip active" data-filter="all" onclick="filterFeed('all',this)">All</div>
+    </div>
+    <button class="add-funds-btn" onclick="showOnboard()" title="Add more funds">
+      <span>＋</span> Add funds
+    </button>
+  </div>
+
+  <!-- last updated -->
+  <div class="last-updated-bar">
+    <span class="lu-dot"></span>
+    <span id="last-updated-text">Last updated today at 9:47 PM · Unit prices from AMFI</span>
+  </div>
+
+  <div class="feed-body" id="feed-body">
+    <!-- pull to refresh indicator -->
+    <div class="ptr-indicator" id="ptr-indicator">
+      <div class="ptr-spinner"></div>
+      <span>Checking for updates…</span>
+    </div>
+
+    <!-- all-news banner -->
+    <div class="all-news-banner" id="all-news-banner" style="display:none;">
+      <p class="anb-text"><b>Showing all fund news.</b> Add funds to your watchlist for a personalised feed.</p>
+      <button class="anb-btn" onclick="showOnboard()">Add funds</button>
+    </div>
+
+    <div class="feed-header-row">
+      <span class="feed-greeting-text" id="feed-greeting">Good morning 👋</span>
+      <span class="feed-date" id="feed-date"></span>
+    </div>
+
+    <!-- shimmer -->
+    <div class="shimmer-list" id="shimmer-list">
+      <div class="shimmer-card"><div class="sh" style="width:30%;margin-bottom:14px;"></div><div class="sh" style="width:95%;"></div><div class="sh" style="width:75%;margin-top:4px;"></div><div class="sh" style="width:45%;margin-top:12px;"></div></div>
+      <div class="shimmer-card"><div class="sh" style="width:30%;margin-bottom:14px;"></div><div class="sh" style="width:90%;"></div><div class="sh" style="width:70%;margin-top:4px;"></div><div class="sh" style="width:45%;margin-top:12px;"></div></div>
+      <div class="shimmer-card"><div class="sh" style="width:30%;margin-bottom:14px;"></div><div class="sh" style="width:85%;"></div><div class="sh" style="width:65%;margin-top:4px;"></div><div class="sh" style="width:45%;margin-top:12px;"></div></div>
+    </div>
+
+    <div class="news-list" id="news-list" style="display:none;"></div>
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active" onclick="switchTab('feed',this)">
+      <span class="nav-icon">📰</span><span class="nav-label">Feed</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="switchTab('alerts',this)">
+      <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="switchTab('watchlist',this)">
+      <span class="nav-icon">📋</span><span class="nav-label">Watchlist</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="switchTab('settings',this)">
+      <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span><span class="nav-dot"></span>
+    </button>
+  </nav>
+</div>
+
+<!-- CONFIRM REMOVE MODAL -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-modal">
+    <span class="confirm-icon">⚠️</span>
+    <div class="confirm-title">Remove this fund?</div>
+    <p class="confirm-body">
+      <b id="confirm-fund-name"></b> will be removed from your watchlist, news feed, and all active alerts. This cannot be undone.
+    </p>
+    <div class="confirm-actions">
+      <button class="confirm-keep" onclick="closeConfirm()">Keep it</button>
+      <button class="confirm-remove" onclick="confirmRemove()">Yes, remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- ARTICLE BOTTOM SHEET -->
+<div class="article-sheet" id="article-sheet">
+  <div class="article-overlay" onclick="closeSheet()"></div>
+  <div class="article-card">
+    <div class="sheet-handle"></div>
+    <div class="sheet-tag-row" id="sheet-tag-row"></div>
+    <h3 class="sheet-headline" id="sheet-headline"></h3>
+    <p class="sheet-meta" id="sheet-meta"></p>
+    <p class="sheet-summary" id="sheet-summary"></p>
+    <div class="sheet-actions">
+      <a class="sheet-read-btn" href="#" id="sheet-read-btn" target="_blank">Read full article →</a>
+      <button class="sheet-bookmark-btn" id="sheet-bookmark-btn" onclick="toggleBookmarkFromSheet()">🔖</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let userName = '';
+let addedFunds = [];
+let skipped = false;
+let activeFilter = 'all';
+let readArticles = new Set();
+let bookmarkedArticles = new Set();
+let pendingRemoveFundId = null;
+let activeSheetArticleId = null;
+
+// ── FUND DATA ──
+const FUNDS = [
+  { id:'sbi-psu',    name:'SBI PSU Direct Fund',        amc:'SBI Mutual Fund',     cat:'Thematic · PSU',     color:'tag-red'    },
+  { id:'hdfc-flexi', name:'HDFC Flexi Cap Fund',         amc:'HDFC Mutual Fund',    cat:'Flexi Cap',           color:'tag-blue'   },
+  { id:'pp-flexi',   name:'Parag Parikh Flexi Cap',      amc:'PPFAS Mutual Fund',   cat:'Flexi Cap',           color:'tag-green'  },
+  { id:'quant-sc',   name:'Quant Small Cap Fund',        amc:'Quant Mutual Fund',   cat:'Small Cap',           color:'tag-yellow' },
+  { id:'mirae-lc',   name:'Mirae Asset Large Cap',       amc:'Mirae Asset MF',      cat:'Large Cap',           color:'tag-blue'   },
+  { id:'axis-bc',    name:'Axis Bluechip Fund',          amc:'Axis Mutual Fund',    cat:'Large Cap',           color:'tag-blue'   },
+  { id:'icici-tech', name:'ICICI Pru Technology Fund',   amc:'ICICI Prudential MF', cat:'Sectoral · Tech',    color:'tag-yellow' },
+  { id:'nippon-sc',  name:'Nippon India Small Cap',      amc:'Nippon India MF',     cat:'Small Cap',           color:'tag-red'    },
+  { id:'hdfc-nifty', name:'HDFC Nifty 50 Index Fund',    amc:'HDFC Mutual Fund',    cat:'Index · Large Cap',   color:'tag-blue'   },
+  { id:'motilal-mid',name:'Motilal Oswal Midcap Fund',   amc:'Motilal Oswal MF',    cat:'Mid Cap',             color:'tag-green'  },
+];
+
+// ── NEWS DATA (jargon-free: unit price instead of NAV, total fund money instead of AUM) ──
+const NEWS = [
+  { id:1,  fund:'sbi-psu',    headline:'Govt delays PSU sell-off plan — SBI PSU Fund unit price falls 3.2% in a single day',           source:'Economic Times',   time:'2 hours ago',  alert:{type:'down',val:'−3.2%'}, summary:'The government announced a delay in its planned sale of stakes in three major public sector companies, citing weak market conditions. SBI PSU Direct Fund, which holds significant exposure to BHEL, NTPC, and Coal India, saw its unit price drop sharply as markets reacted to the news.' },
+  { id:2,  fund:'pp-flexi',   headline:'Parag Parikh Flexi Cap raises US tech holdings to 28% as rupee weakens against dollar',         source:'Mint',             time:'4 hours ago',  alert:null,                       summary:'PPFAS Mutual Fund has increased its international holdings in the Flexi Cap scheme, now holding meaningful stakes in Alphabet and Meta. This move works as a hedge against the rupee losing value against the dollar, which has been happening recently.' },
+  { id:3,  fund:'hdfc-nifty', headline:'Nifty 50 crosses 24,000 mark for first time in 6 months — index fund holders benefit',          source:'Business Standard',time:'5 hours ago',  alert:{type:'up',val:'+1.1%'},   summary:'The Nifty 50 index crossed the 24,000 level for the first time since November, driven by strong buying from foreign investors and positive signals from global markets. HDFC Nifty 50 Index Fund investors saw a 1.1% rise in their unit price as a result.' },
+  { id:4,  fund:'quant-sc',   headline:'SEBI examines Quant Mutual Fund over alleged unfair trading — fund unit prices turn volatile',   source:'CNBCTV18',         time:'6 hours ago',  alert:{type:'down',val:'−1.8%'}, summary:'India\'s markets regulator is reportedly looking into trading activity at Quant Mutual Fund over concerns of unfair practices. The fund house has denied any wrongdoing, but investor confidence has been shaken, causing unit prices across its schemes including the Small Cap Fund to dip.' },
+  { id:5,  fund:'axis-bc',    headline:'Axis Bluechip Fund gets new investment head after high-profile fund manager departure',          source:'Value Research',   time:'Yesterday',    alert:null,                       summary:'Axis Mutual Fund has appointed a new head of investments for its equity funds following the departure of well-known fund manager Jinesh Gopani. Investors in Axis Bluechip have been closely watching this transition since the fund\'s approach was heavily influenced by his concentrated investment style.' },
+  { id:6,  fund:'hdfc-flexi', headline:'HDFC Flexi Cap adds Zomato and Jio Financial to its top holdings for the first time',           source:'Mint',             time:'Yesterday',    alert:null,                       summary:'HDFC Mutual\'s flagship flexible fund has made notable new bets, picking up stakes in Zomato and the newly listed Jio Financial Services. The fund has reduced its long-standing heavy holding in HDFC Bank in favour of newer growth companies.' },
+  { id:7,  fund:'mirae-lc',   headline:'Mirae Asset Large Cap beats its target index for 3rd quarter in a row',                         source:'Economic Times',   time:'2 days ago',   alert:null,                       summary:'Mirae Asset Large Cap Fund has outperformed the Nifty 100 for three consecutive quarters, generating 2.4% more return than the index. Its higher-than-usual bets on private banks and technology companies have been the main reason behind this consistent performance.' },
+  { id:8,  fund:'sbi-psu',    headline:'Coal India quarterly profit beats expectations — good news for PSU-focused funds',               source:'Business Standard',time:'2 days ago',   alert:null,                       summary:'Coal India posted quarterly earnings well above what analysts expected, driven by higher selling prices and better operations. This is positive news for investors in funds with high public sector company exposure, including SBI PSU Direct Fund where Coal India is a major holding.' },
+  { id:9,  fund:'nippon-sc',  headline:'Small company funds see ₹4,200 crore pulled out in April — selling pressure builds',            source:'CNBCTV18',         time:'3 days ago',   alert:{type:'down',val:'−2.1%'}, summary:'Industry data shows large net withdrawals from the small company mutual fund category in April — the highest monthly outflow since October 2022. Nippon India Small Cap, one of the biggest funds in this space, saw its unit price drop as investors sold off their holdings.' },
+  { id:10, fund:'icici-tech', headline:'Global tech rally lifts ICICI Pru Technology Fund — AI excitement drives unit price up 3.4%',   source:'Mint',             time:'3 days ago',   alert:{type:'up',val:'+3.4%'},  summary:'The worldwide technology sector surge, driven by continued excitement about artificial intelligence, has significantly boosted ICICI Prudential Technology Fund. The fund\'s mix of Indian IT giants like Infosys and TCS alongside international tech exposure through its overseas allocation has proven to be a strong combination.' },
+];
+
+// ── INIT ──
+function init() {
+  userName = localStorage.getItem('fp_username') || 'Madhavan';
+  updateNameDisplays();
+  setFeedGreeting();
+  setFeedDate();
+  setLastUpdated();
+}
+
+function updateNameDisplays() {
+  const initial = userName.charAt(0).toUpperCase();
+  document.getElementById('user-name-display').textContent = userName;
+  document.getElementById('allset-name').textContent = userName;
+  document.getElementById('onboard-avatar').textContent = initial;
+  document.getElementById('feed-avatar').textContent = initial;
+  setFeedGreeting();
+}
+
+function setFeedGreeting() {
+  const h = new Date().getHours();
+  const g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const n = userName && userName !== 'there' ? `, ${userName}` : '';
+  document.getElementById('feed-greeting').textContent = `${g}${n} 👋`;
+}
+
+function setFeedDate() {
+  document.getElementById('feed-date').textContent =
+    new Date().toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+}
+
+function setLastUpdated() {
+  const now = new Date();
+  const t = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  document.getElementById('last-updated-text').textContent =
+    `Last updated today at ${t} · Unit prices from AMFI`;
+}
+
+// ── FUND SEARCH ──
+const searchInput = document.getElementById('fund-search');
+const searchResultsEl = document.getElementById('search-results');
+
+searchInput.addEventListener('input', function() {
+  const q = this.value.trim().toLowerCase();
+  if (!q) { searchResultsEl.classList.remove('show'); return; }
+  const matches = FUNDS.filter(f =>
+    f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)
+  ).slice(0, 5);
+  renderSearchResults(matches);
+});
+
+function renderSearchResults(matches) {
+  if (!matches.length) {
+    searchResultsEl.innerHTML = `<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>`;
+  } else {
+    searchResultsEl.innerHTML = matches.map(f => {
+      const isAdded = addedFunds.find(a => a.id === f.id);
+      return `<div class="search-result-item ${isAdded ? 'is-added' : ''}"
+        onclick="${isAdded ? '' : `addFund('${f.id}')`}">
+        <div>
+          <div class="sri-name">${f.name}</div>
+          <div class="sri-meta">${f.cat} · ${f.amc}</div>
+        </div>
+        ${isAdded ? '<div class="sri-added-check">✓</div>' : ''}
+      </div>`;
+    }).join('');
+  }
+  searchResultsEl.classList.add('show');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) searchResultsEl.classList.remove('show');
+});
+
+// ── ADD FUND ──
+function addFund(id) {
+  if (addedFunds.find(f => f.id === id)) return;
+  const fund = FUNDS.find(f => f.id === id);
+  if (!fund) return;
+  addedFunds.push(fund);
+  localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+  // also write to Supabase in background
+  addToWatchlist(fund);
+  updateAddedList();
+  updateContinueBtn();
+  const q = searchInput.value.trim().toLowerCase();
+  if (q) renderSearchResults(FUNDS.filter(f => f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q)).slice(0, 5));
+}
+
+function updateAddedList() {
+  const label = document.getElementById('added-label');
+  const list  = document.getElementById('added-funds-list');
+  label.classList.toggle('show', addedFunds.length > 0);
+  list.innerHTML = addedFunds.map(f => `
+    <div class="added-fund-chip" id="chip-${f.id}">
+      <div class="afc-left">
+        <div class="afc-check">✓</div>
+        <div><div class="afc-name">${f.name}</div><div class="afc-cat">${f.cat}</div></div>
+      </div>
+      <button class="afc-remove" onclick="removeFundInstant('${f.id}')" title="Remove">✕</button>
+    </div>`).join('');
+}
+
+// instant remove — used ONLY on onboarding screen (no confirmation needed)
+function removeFundInstant(id) {
+  const chip = document.getElementById(`chip-${id}`);
+  if (chip) {
+    chip.style.transition = 'opacity .2s, transform .2s';
+    chip.style.opacity = '0';
+    chip.style.transform = 'translateX(10px)';
+  }
+  setTimeout(() => {
+    addedFunds = addedFunds.filter(f => f.id !== id);
+    localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+    updateAddedList();
+    updateContinueBtn();
+    const q = document.getElementById('fund-search').value.trim().toLowerCase();
+    if (q) renderSearchResults(FUNDS.filter(f =>
+      f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q)
+    ).slice(0, 5));
+  }, 180);
+}
+
+function updateContinueBtn() {
+  document.getElementById('btn-continue').classList.toggle('ready', addedFunds.length > 0);
+}
+
+// confirm remove — used ONLY from inside the app (feed chips, alerts)
+function askRemoveFundFromFeed(event, id) {
+  event.stopPropagation();
+  pendingRemoveFundId = id;
+  const fund = addedFunds.find(f => f.id === id);
+  if (!fund) return;
+  document.getElementById('confirm-fund-name').textContent = fund.name;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm() {
+  pendingRemoveFundId = null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+function confirmRemove() {
+  if (!pendingRemoveFundId) return;
+  const removingId = pendingRemoveFundId;
+  addedFunds = addedFunds.filter(f => f.id !== removingId);
+  pendingRemoveFundId = null;
+  closeConfirm();
+  localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+  // also remove from Supabase in background
+  removeFromWatchlist(removingId);
+  updateAddedList();
+  updateContinueBtn();
+  buildFeedFilters();
+  renderNews(activeFilter);
+}
+
+// ── NAVIGATION ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goAllSet() {
+  if (!addedFunds.length) return;
+  skipped = false;
+  localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+  localStorage.setItem('fp_setup_done', '1');
+  addedFunds.forEach(f => addToWatchlist(f));
+  const count = addedFunds.length;
+  document.getElementById('allset-message').textContent =
+    `From this moment on, FundPulse is watching ${count === 1 ? 'your fund' : `all ${count} of your funds`} so you don't have to. Your personalised news feed is ready — we'll alert you the moment something moves.`;
+  document.getElementById('allset-chips').innerHTML =
+    addedFunds.map(f => `<div class="allset-chip"><b>${f.name.split(' ').slice(0,3).join(' ')}</b></div>`).join('');
+  showScreen('screen-allset');
+}
+
+function skipOnboard() {
+  skipped = true;
+  addedFunds = [];
+  localStorage.setItem('fp_setup_done', '1');
+  showScreen('screen-feed');
+  buildFeedFilters();
+  loadFeed();
+}
+
+function goFeed() {
+  showScreen('screen-feed');
+  buildFeedFilters();
+  loadFeed();
+}
+
+function showOnboard() {
+  // clear search bar so user starts fresh
+  document.getElementById('fund-search').value = '';
+  searchResultsEl.classList.remove('show');
+  showScreen('screen-onboard');
+}
+
+function openProfile() {
+  // TODO: Open user profile screen (funds, preferences, notification settings)
+  // Tracked in document as upcoming feature
+  alert('Profile screen coming soon! This will show your funds, preferences, and notification settings.');
+}
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  const paths = {
+    alerts:    'alerts.html',
+    watchlist: 'watchlist.html',
+    settings:  'settings.html',
+  };
+  if (tab !== 'feed') {
+    window.location.href = paths[tab] || 'feed.html';
+  }
+}
+
+// ── FEED ──
+function buildFeedFilters() {
+  const filtersEl = document.getElementById('feed-filters');
+  filtersEl.innerHTML = `<div class="filter-chip active" data-filter="all" onclick="filterFeed('all',this)">All</div>`;
+  addedFunds.forEach(f => {
+    filtersEl.innerHTML += `
+      <div class="filter-chip removable" data-filter="${f.id}" onclick="filterFeed('${f.id}',this)">
+        ${f.name.split(' ').slice(0,2).join(' ')}
+        <span class="fc-remove" onclick="askRemoveFundFromFeed(event,'${f.id}')" title="Remove fund">✕</span>
+      </div>`;
+  });
+  document.getElementById('all-news-banner').style.display = skipped ? 'flex' : 'none';
+}
+
+function loadFeed() {
+  document.getElementById('shimmer-list').style.display = 'flex';
+  document.getElementById('news-list').style.display    = 'none';
+  setTimeout(() => {
+    document.getElementById('shimmer-list').style.display = 'none';
+    document.getElementById('news-list').style.display    = 'flex';
+    renderNews('all');
+    // play swipe tutorial only once
+    if (!localStorage.getItem('fp_swipe_tutored')) {
+      localStorage.setItem('fp_swipe_tutored', '1');
+      setTimeout(playSwipeTutorial, 800);
+    }
+  }, 1100);
+}
+
+function askRemoveFundFromFeed(event, id) {
+  event.stopPropagation(); // prevent filter chip click
+  pendingRemoveFundId = id;
+  const fund = addedFunds.find(f => f.id === id);
+  if (!fund) return;
+  document.getElementById('confirm-fund-name').textContent = fund.name;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function playSwipeTutorial() {
+  const firstWrap = document.querySelector('.swipe-wrapper');
+  if (!firstWrap) return;
+  const card = firstWrap.querySelector('.news-card');
+  if (!card) return;
+
+  // make sure the wrapper clips correctly
+  firstWrap.style.overflow = 'hidden';
+
+  // Step 1: slide LEFT — reveal dismiss (red) background
+  setTimeout(() => {
+    card.style.transition = 'transform .6s cubic-bezier(.4,0,.2,1)';
+    card.style.transform  = 'translateX(-80px)';
+  }, 400);
+
+  // Step 2: snap back to centre
+  setTimeout(() => {
+    card.style.transform = 'translateX(0)';
+  }, 1300);
+
+  // Step 3: slide RIGHT — reveal bookmark (gold) background
+  setTimeout(() => {
+    card.style.transform = 'translateX(80px)';
+  }, 1900);
+
+  // Step 4: snap back
+  setTimeout(() => {
+    card.style.transform = 'translateX(0)';
+  }, 2800);
+
+  // Step 5: cleanup
+  setTimeout(() => {
+    card.style.transition = '';
+    card.style.transform  = '';
+    firstWrap.style.overflow = '';
+  }, 3400);
+}
+
+function filterFeed(filterId, el) {
+  activeFilter = filterId;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderNews(filterId);
+}
+
+function renderNews(filterId) {
+  let articles = [...NEWS];
+  if (filterId !== 'all') {
+    articles = articles.filter(n => n.fund === filterId);
+  } else if (!skipped && addedFunds.length) {
+    const ids = addedFunds.map(f => f.id);
+    articles = articles.filter(n => ids.includes(n.fund));
+  }
+
+  const list = document.getElementById('news-list');
+  if (!articles.length) {
+    list.innerHTML = `<div style="text-align:center;padding:48px 20px;">
+      <div style="font-size:2rem;margin-bottom:12px;">📭</div>
+      <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:1rem;margin-bottom:8px;">No recent news</div>
+      <div style="font-size:.8rem;color:var(--muted);">No news found in the last 48 hours for this fund. We're watching.</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = articles.map((n, i) => {
+    const fund = FUNDS.find(f => f.id === n.fund);
+    const isRead = readArticles.has(n.id);
+    const isBookmarked = bookmarkedArticles.has(n.id);
+    const alertBadge = n.alert ? `
+      <div class="news-alert-badge ${n.alert.type === 'up' ? 'positive' : ''}">
+        ${n.alert.type === 'up' ? '📈' : '📉'} Related to today's ${n.alert.val} move in unit price
+      </div>` : '';
+    return `
+      <div class="swipe-wrapper" id="wrap-${n.id}">
+        <div class="swipe-action swipe-action-left"><span class="swipe-action-icon">🔖</span><span>Save</span></div>
+        <div class="swipe-action swipe-action-right"><span class="swipe-action-icon">✕</span><span>Dismiss</span></div>
+        <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
+          id="card-${n.id}"
+          style="animation:fadeup .4s ${i*0.06}s both;"
+          onclick="openSheet(${n.id})">
+          <div class="bookmark-tag">Saved</div>
+          <div class="unread-dot"></div>
+          <div class="news-card-top">
+            <span class="news-fund-tag ${fund ? fund.color : 'tag-all'}">${fund ? fund.name.split(' ').slice(0,2).join(' ') : 'General'}</span>
+            <span class="news-time">${n.time}</span>
+          </div>
+          <div class="news-headline">${n.headline}</div>
+          <div class="news-source">
+            <span>${n.source}</span>
+            <span class="news-source-dot"></span>
+            <span>${n.time}</span>
+          </div>
+          ${alertBadge}
+        </div>
+      </div>`;
+  }).join('');
+
+  // attach swipe handlers
+  articles.forEach(n => initSwipe(n.id));
+}
+
+// ── SWIPE LOGIC ──
+function initSwipe(articleId) {
+  const card = document.getElementById(`card-${articleId}`);
+  if (!card) return;
+  let startX = 0, currentX = 0, isDragging = false;
+
+  function onStart(e) {
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    isDragging = true;
+    card.classList.add('swiping');
+  }
+  function onMove(e) {
+    if (!isDragging) return;
+    currentX = (e.touches ? e.touches[0].clientX : e.clientX) - startX;
+    card.style.transform = `translateX(${currentX}px)`;
+  }
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    card.classList.remove('swiping');
+    const threshold = 80;
+    if (currentX > threshold) {
+      // swipe right → bookmark
+      bookmarkArticle(articleId);
+      card.classList.add('snap-back');
+      card.style.transform = '';
+    } else if (currentX < -threshold) {
+      // swipe left → dismiss
+      dismissArticle(articleId);
+    } else {
+      card.classList.add('snap-back');
+      card.style.transform = '';
+      setTimeout(() => card.classList.remove('snap-back'), 300);
+    }
+    currentX = 0;
+  }
+
+  card.addEventListener('touchstart', onStart, { passive: true });
+  card.addEventListener('touchmove',  onMove,  { passive: true });
+  card.addEventListener('touchend',   onEnd);
+  card.addEventListener('mousedown',  onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup',  onEnd);
+}
+
+function bookmarkArticle(id) {
+  const card = document.getElementById(`card-${id}`);
+  if (!card) return;
+  if (bookmarkedArticles.has(id)) {
+    bookmarkedArticles.delete(id);
+    card.classList.remove('is-bookmarked');
+  } else {
+    bookmarkedArticles.add(id);
+    card.classList.add('is-bookmarked');
+    card.classList.add('bookmarked-anim');
+    setTimeout(() => card.classList.remove('bookmarked-anim'), 400);
+  }
+  card.classList.add('snap-back');
+  card.style.transform = '';
+  // update sheet bookmark button if open
+  if (activeSheetArticleId === id) updateSheetBookmarkBtn();
+}
+
+function dismissArticle(id) {
+  const card = document.getElementById(`card-${id}`);
+  const wrap = document.getElementById(`wrap-${id}`);
+  if (!card || !wrap) return;
+  card.classList.add('dismissed');
+  setTimeout(() => {
+    wrap.style.maxHeight = wrap.offsetHeight + 'px';
+    wrap.style.transition = 'max-height .35s ease, margin .35s ease, opacity .35s ease';
+    wrap.style.opacity = '0';
+    wrap.style.maxHeight = '0';
+    wrap.style.marginBottom = '0';
+    setTimeout(() => wrap.remove(), 360);
+  }, 300);
+}
+
+// ── ARTICLE SHEET ──
+function openSheet(id) {
+  const article = NEWS.find(n => n.id === id);
+  if (!article) return;
+  activeSheetArticleId = id;
+  // mark as read
+  readArticles.add(id);
+  const card = document.getElementById(`card-${id}`);
+  if (card) card.classList.add('read');
+
+  const fund = FUNDS.find(f => f.id === article.fund);
+  document.getElementById('sheet-tag-row').innerHTML = fund
+    ? `<span class="news-fund-tag ${fund.color}">${fund.name.split(' ').slice(0,2).join(' ')}</span>` : '';
+  document.getElementById('sheet-headline').textContent = article.headline;
+  document.getElementById('sheet-meta').textContent = `${article.source} · ${article.time}`;
+  document.getElementById('sheet-summary').textContent = article.summary;
+  updateSheetBookmarkBtn();
+  document.getElementById('article-sheet').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function updateSheetBookmarkBtn() {
+  const btn = document.getElementById('sheet-bookmark-btn');
+  if (!btn) return;
+  const isBookmarked = bookmarkedArticles.has(activeSheetArticleId);
+  btn.classList.toggle('active', isBookmarked);
+  btn.title = isBookmarked ? 'Remove bookmark' : 'Save for later';
+}
+
+function toggleBookmarkFromSheet() {
+  if (activeSheetArticleId) bookmarkArticle(activeSheetArticleId);
+}
+
+function closeSheet() {
+  document.getElementById('article-sheet').classList.remove('open');
+  document.body.style.overflow = '';
+  activeSheetArticleId = null;
+}
+
+// ── PULL TO REFRESH ──
+let ptrStart = 0, ptrActive = false;
+const feedBody = document.getElementById('feed-body');
+feedBody.addEventListener('touchstart', e => {
+  if (feedBody.scrollTop === 0) { ptrStart = e.touches[0].clientY; ptrActive = true; }
+}, { passive: true });
+feedBody.addEventListener('touchend', () => {
+  if (ptrActive) {
+    ptrActive = false;
+    const ptr = document.getElementById('ptr-indicator');
+    ptr.classList.add('show');
+    setLastUpdated();
+    setTimeout(() => { ptr.classList.remove('show'); renderNews(activeFilter); }, 1400);
+  }
+});
+
+// ── KEYBOARD ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSheet(); closeConfirm(); }
+});
+
+// ── BOOT ──
+async function boot() {
+  // check auth — redirect if not logged in
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  // get name immediately from localStorage for fast render
+  const cachedName = localStorage.getItem('fp_username') || 'there';
+  userName = cachedName;
+
+  // load funds from localStorage first — instant, no flicker
+  const saved = localStorage.getItem('fp_funds');
+  const hasSetupBefore = localStorage.getItem('fp_setup_done') === '1';
+
+  if (saved) {
+    try { addedFunds = JSON.parse(saved); } catch(e) { addedFunds = []; }
+  }
+
+  // show the right screen immediately based on local data
+  init();
+
+  if (addedFunds.length > 0 || hasSetupBefore) {
+    // user has funds or has been through onboarding before — go to feed
+    skipped = hasSetupBefore && addedFunds.length === 0;
+    showScreen('screen-feed');
+    buildFeedFilters();
+    loadFeed();
+  }
+  // else: show onboarding (default screen is already active)
+
+  // sync with Supabase in background — update name and funds silently
+  const user = await getUser();
+  if (user) {
+    const sbName = user.user_metadata?.full_name;
+    if (sbName) {
+      localStorage.setItem('fp_username', sbName);
+      userName = sbName;
+      updateNameDisplays();
+    }
+    // sync funds from Supabase in background
+    const rows = await fetchWatchlist();
+    if (rows.length) {
+      addedFunds = rows.map(r => ({
+        id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
+      }));
+      localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+      localStorage.setItem('fp_setup_done', '1');
+      // if we showed onboarding but Supabase has funds, switch to feed
+      if (!document.getElementById('screen-feed').classList.contains('active')) {
+        showScreen('screen-feed');
+        buildFeedFilters();
+        loadFeed();
+      } else {
+        buildFeedFilters();
+      }
+    }
+  }
+}
+
+// testing fallback
+if (!localStorage.getItem('fp_username')) {
+  localStorage.setItem('fp_username', 'Madhavan');
+}
+
+// wait for supabase.js to signal ready, then boot
+window.addEventListener('supabase_ready', boot, { once: true });
+// if SDK already loaded (cached), fire immediately
+if (window._supabase) { setTimeout(boot, 0); }
+</script>
+</body>
+</html>

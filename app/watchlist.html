@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FundPulse — Watchlist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <script src="supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy:       #070c18;
+      --navy-2:     #0b1220;
+      --navy-3:     #0f1a2e;
+      --navy-4:     #142038;
+      --blue:       #2360f5;
+      --blue-light: #4a7cff;
+      --blue-dim:   rgba(35,96,245,0.12);
+      --green:      #00d47e;
+      --green-dim:  rgba(0,212,126,0.12);
+      --red:        #ff4060;
+      --red-dim:    rgba(255,64,96,0.12);
+      --yellow:     #ffb400;
+      --yellow-dim: rgba(255,180,0,0.12);
+      --white:      #edf2ff;
+      --muted:      #7a8fb0;
+      --muted-2:    #4a5878;
+      --card:       rgba(255,255,255,0.04);
+      --cb:         rgba(255,255,255,0.08);
+    }
+    html, body { height: 100%; }
+    body {
+      background: var(--navy); color: var(--white);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 400; overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LAYOUT ── */
+    .app-screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .app-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 20px 14px; border-bottom: 1px solid var(--cb);
+      background: rgba(7,12,24,0.96);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      flex-shrink: 0; z-index: 10;
+    }
+    .app-logo {
+      font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem;
+      letter-spacing: -.02em; display: flex; align-items: center; gap: 8px;
+      color: var(--white); text-decoration: none;
+    }
+    .logo-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--blue);
+      box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(35,96,245,.5);
+      animation: dp 2.2s ease-in-out infinite;
+    }
+    @keyframes dp {
+      0%,100%{box-shadow:0 0 6px var(--blue),0 0 14px rgba(35,96,245,.4);}
+      50%{box-shadow:0 0 14px var(--blue),0 0 28px rgba(35,96,245,.6);}
+    }
+    .header-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), #0a1f5c);
+      border: 1.5px solid rgba(35,96,245,.4);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif; font-weight: 700;
+      font-size: .78rem; color: var(--white); cursor: pointer;
+      transition: transform .2s;
+    }
+    .header-avatar:hover { transform: scale(1.08); }
+
+    /* ── SCROLL BODY ── */
+    .wl-body {
+      flex: 1; overflow-y: auto; padding: 0 0 16px;
+    }
+    .wl-body::-webkit-scrollbar { width: 3px; }
+    .wl-body::-webkit-scrollbar-track { background: transparent; }
+    .wl-body::-webkit-scrollbar-thumb { background: var(--navy-4); border-radius: 3px; }
+
+    /* ── PAGE TITLE ── */
+    .page-title-row {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 20px 20px 16px;
+    }
+    .page-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.5rem; letter-spacing: -.025em;
+    }
+    .page-subtitle { font-size: .72rem; color: var(--muted-2); margin-top: 3px; }
+    .btn-add-fund {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 100px; border: none;
+      background: var(--blue); color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: .78rem; font-weight: 600; cursor: pointer;
+      transition: all .22s; white-space: nowrap; flex-shrink: 0;
+      box-shadow: 0 0 18px rgba(35,96,245,.4);
+    }
+    .btn-add-fund:hover { background: var(--blue-light); transform: translateY(-1px); }
+
+    /* ── SEARCH BAR (add fund) ── */
+    .search-section {
+      margin: 0 16px 16px; display: none;
+    }
+    .search-section.open { display: block; }
+    .search-wrap { position: relative; }
+    .search-icon {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      color: var(--muted-2); font-size: .9rem; pointer-events: none;
+    }
+    .search-input {
+      width: 100%; background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 12px; padding: 13px 14px 13px 40px;
+      color: var(--white); font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: .9rem; outline: none; transition: border-color .22s;
+    }
+    .search-input::placeholder { color: var(--muted-2); }
+    .search-input:focus { border-color: var(--blue); }
+    .search-results {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 12px; margin-top: 6px; overflow: hidden; display: none;
+    }
+    .search-results.show { display: block; }
+    .search-result-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 16px; cursor: pointer; transition: background .18s;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover:not(.is-added) { background: rgba(35,96,245,.08); }
+    .search-result-item.is-added { cursor: default; opacity: .6; }
+    .sri-name { font-size: .84rem; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+    .sri-meta { font-size: .7rem; color: var(--muted); }
+    .sri-check {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      background: var(--green-dim); border: 1px solid rgba(0,212,126,.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .65rem; color: var(--green);
+    }
+
+    /* ── FUND CARDS ── */
+    .fund-list {
+      display: flex; flex-direction: column; gap: 10px; padding: 0 16px;
+    }
+
+    .fund-card {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 16px; overflow: hidden;
+      transition: border-color .25s, transform .25s;
+      animation: fadeup .4s both;
+      position: relative;
+    }
+    .fund-card:hover { border-color: rgba(35,96,245,.2); }
+
+    /* left accent bar */
+    .fund-card::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px; border-radius: 3px 0 0 3px;
+    }
+    .fund-card.accent-red::before    { background: var(--red);    }
+    .fund-card.accent-blue::before   { background: var(--blue);   }
+    .fund-card.accent-green::before  { background: var(--green);  }
+    .fund-card.accent-yellow::before { background: var(--yellow); }
+
+    .fund-card-inner { padding: 16px 16px 14px 19px; }
+
+    /* top row */
+    .fc-top {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 10px; margin-bottom: 12px;
+    }
+    .fc-icon {
+      width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+    }
+    .fc-title { flex: 1; min-width: 0; }
+    .fc-name {
+      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .95rem;
+      color: var(--white); line-height: 1.3; margin-bottom: 3px;
+    }
+    .fc-meta { font-size: .68rem; color: var(--muted); }
+
+    /* remove button — hover reveal */
+    .fc-remove {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      background: var(--red-dim); border: 1px solid rgba(255,64,96,.2);
+      color: var(--red); font-size: .72rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transform: scale(0.6);
+      transition: opacity .22s, transform .22s;
+    }
+    .fund-card:hover .fc-remove { opacity: 1; transform: scale(1); }
+    .fc-remove:hover { background: var(--red); color: #fff; }
+
+    /* price row */
+    .fc-price-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .fc-price-group {}
+    .fc-price-label { font-size: .62rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+    .fc-price {
+      font-family: 'Outfit', sans-serif; font-weight: 700;
+      font-size: 1.25rem; letter-spacing: -.02em;
+    }
+    .fc-change {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 100px;
+      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .88rem;
+    }
+    .fc-change.up   { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,212,126,.2); }
+    .fc-change.down { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(255,64,96,.2); }
+    .fc-change-arrow { font-size: .8rem; }
+
+    /* bottom row */
+    .fc-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid rgba(255,255,255,.05); padding-top: 12px;
+    }
+    .fc-alert-status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .72rem; color: var(--muted);
+    }
+    .fc-alert-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); box-shadow: 0 0 5px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100%{box-shadow:0 0 4px var(--green);}
+      50%{box-shadow:0 0 10px var(--green),0 0 18px rgba(0,212,126,.3);}
+    }
+    .fc-alert-dot.none { background: var(--muted-2); box-shadow: none; animation: none; }
+    .fc-alert-count { color: var(--white); font-weight: 500; }
+
+    .fc-alerts-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 12px; border-radius: 100px; border: none;
+      background: var(--blue-dim); color: var(--blue-light);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: .72rem; font-weight: 600; cursor: pointer;
+      transition: all .2s;
+    }
+    .fc-alerts-btn:hover { background: var(--blue); color: #fff; }
+
+    /* ── SUMMARY BAR ── */
+    .summary-bar {
+      display: flex; gap: 0; margin: 0 16px 14px;
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 12px; overflow: hidden;
+    }
+    .sb-item {
+      flex: 1; padding: 12px 10px; text-align: center;
+      border-right: 1px solid var(--cb);
+    }
+    .sb-item:last-child { border-right: none; }
+    .sb-val {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.1rem; letter-spacing: -.02em; margin-bottom: 3px;
+    }
+    .sb-val.green { color: var(--green); }
+    .sb-val.red   { color: var(--red);   }
+    .sb-val.blue  { color: var(--blue-light); }
+    .sb-lbl { font-size: .62rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 60px 32px;
+    }
+    .empty-icon { font-size: 2.8rem; margin-bottom: 16px; }
+    .empty-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.1rem; margin-bottom: 10px; letter-spacing: -.015em;
+    }
+    .empty-body {
+      font-size: .84rem; color: var(--muted); line-height: 1.7;
+      font-weight: 300; max-width: 260px; margin-bottom: 24px;
+    }
+    .btn-empty {
+      padding: 12px 26px; border-radius: 100px; border: none;
+      background: var(--blue); color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: .88rem; font-weight: 600; cursor: pointer;
+      transition: all .25s; box-shadow: 0 0 24px rgba(35,96,245,.4);
+    }
+    .btn-empty:hover { background: var(--blue-light); transform: translateY(-1px); }
+
+    /* ── CONFIRM MODAL ── */
+    .confirm-overlay {
+      position: fixed; inset: 0; z-index: 400;
+      background: rgba(4,9,18,.85); backdrop-filter: blur(14px);
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .confirm-overlay.open { opacity: 1; pointer-events: all; }
+    .confirm-modal {
+      background: var(--navy-3); border: 1px solid var(--cb);
+      border-radius: 18px; padding: 28px 24px; width: 100%; max-width: 340px;
+      transform: scale(.94); transition: transform .28s cubic-bezier(.34,1.56,.64,1);
+    }
+    .confirm-overlay.open .confirm-modal { transform: scale(1); }
+    .confirm-icon { font-size: 2rem; margin-bottom: 12px; display: block; text-align: center; }
+    .confirm-title {
+      font-family: 'Outfit', sans-serif; font-weight: 800;
+      font-size: 1.05rem; text-align: center; margin-bottom: 8px;
+    }
+    .confirm-body {
+      font-size: .82rem; color: var(--muted); line-height: 1.65;
+      text-align: center; margin-bottom: 22px;
+    }
+    .confirm-body b { color: var(--white); font-weight: 500; }
+    .confirm-actions { display: flex; gap: 10px; }
+    .confirm-keep {
+      flex: 1; padding: 12px; border-radius: 10px;
+      border: 1px solid var(--cb); background: transparent; color: var(--white);
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+    }
+    .confirm-keep:hover { background: rgba(255,255,255,.06); }
+    .confirm-remove {
+      flex: 1; padding: 12px; border-radius: 10px;
+      border: 1px solid rgba(255,64,96,.2); background: var(--red-dim); color: var(--red);
+      font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: all .2s;
+    }
+    .confirm-remove:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      display: flex; align-items: center;
+      background: rgba(11,18,32,0.97); border-top: 1px solid var(--cb);
+      backdrop-filter: blur(20px); flex-shrink: 0;
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 10px 8px; gap: 4px; cursor: pointer;
+      transition: all .2s; border: none; background: none;
+      color: var(--muted-2); font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .nav-item.active { color: var(--blue); }
+    .nav-item:hover  { color: var(--muted); }
+    .nav-icon  { font-size: 1.15rem; line-height: 1; }
+    .nav-label { font-size: .6rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-dot   { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); margin-top: 2px; opacity: 0; transition: opacity .2s; }
+    .nav-item.active .nav-dot { opacity: 1; }
+
+    @keyframes fadeup {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media(min-width: 520px) {
+      .app-screen    { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+      .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-screen">
+
+  <!-- HEADER -->
+  <div class="app-header">
+    <a class="app-logo" href="../index.html"><span class="logo-dot"></span>FundPulse</a>
+    <div class="header-avatar" id="header-avatar">M</div>
+  </div>
+
+  <!-- BODY -->
+  <div class="wl-body" id="wl-body"></div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="navigate('feed')">
+      <span class="nav-icon">📰</span><span class="nav-label">Feed</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="navigate('alerts')">
+      <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item active">
+      <span class="nav-icon">📋</span><span class="nav-label">Watchlist</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="navigate('settings')">
+      <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span><span class="nav-dot"></span>
+    </button>
+  </nav>
+</div>
+
+<!-- CONFIRM REMOVE MODAL -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-modal">
+    <span class="confirm-icon">⚠️</span>
+    <div class="confirm-title">Remove this fund?</div>
+    <p class="confirm-body">
+      <b id="confirm-fund-name"></b> will be removed from your watchlist, news feed, and all active alerts.
+    </p>
+    <div class="confirm-actions">
+      <button class="confirm-keep" onclick="closeConfirm()">Keep it</button>
+      <button class="confirm-remove" onclick="confirmRemove()">Yes, remove</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+const userName = localStorage.getItem('fp_username') || 'Madhavan';
+let funds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
+let alertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+let pendingRemoveId = null;
+let searchOpen = false;
+
+// ── DEMO PRICE DATA ──
+const DEMO_PRICES = {
+  'sbi-psu':    { price:'₹28.34',  change:'-3.2%', dir:'down' },
+  'hdfc-flexi': { price:'₹142.80', change:'+1.4%', dir:'up'   },
+  'pp-flexi':   { price:'₹71.88',  change:'+2.1%', dir:'up'   },
+  'quant-sc':   { price:'₹214.50', change:'-1.8%', dir:'down' },
+  'mirae-lc':   { price:'₹98.42',  change:'+0.7%', dir:'up'   },
+  'axis-bc':    { price:'₹52.16',  change:'-0.4%', dir:'down' },
+  'icici-tech': { price:'₹188.70', change:'+3.4%', dir:'up'   },
+  'nippon-sc':  { price:'₹134.22', change:'-2.1%', dir:'down' },
+  'hdfc-nifty': { price:'₹188.92', change:'+0.9%', dir:'up'   },
+  'motilal-mid':{ price:'₹76.55',  change:'+1.2%', dir:'up'   },
+};
+
+const FUND_META = {
+  'sbi-psu':    { icon:'🏭', accent:'accent-red'    },
+  'hdfc-flexi': { icon:'📊', accent:'accent-blue'   },
+  'pp-flexi':   { icon:'🌍', accent:'accent-green'  },
+  'quant-sc':   { icon:'⚡', accent:'accent-yellow' },
+  'mirae-lc':   { icon:'🏦', accent:'accent-blue'   },
+  'axis-bc':    { icon:'📈', accent:'accent-blue'   },
+  'icici-tech': { icon:'💻', accent:'accent-yellow' },
+  'nippon-sc':  { icon:'🚀', accent:'accent-red'    },
+  'hdfc-nifty': { icon:'📉', accent:'accent-blue'   },
+  'motilal-mid':{ icon:'🎯', accent:'accent-green'  },
+};
+
+// ── ALL FUNDS (for search) ──
+const ALL_FUNDS = [
+  { id:'sbi-psu',    name:'SBI PSU Direct Fund',        amc:'SBI Mutual Fund',     cat:'Thematic · PSU'    },
+  { id:'hdfc-flexi', name:'HDFC Flexi Cap Fund',         amc:'HDFC Mutual Fund',    cat:'Flexi Cap'          },
+  { id:'pp-flexi',   name:'Parag Parikh Flexi Cap',      amc:'PPFAS Mutual Fund',   cat:'Flexi Cap'          },
+  { id:'quant-sc',   name:'Quant Small Cap Fund',        amc:'Quant Mutual Fund',   cat:'Small Cap'          },
+  { id:'mirae-lc',   name:'Mirae Asset Large Cap',       amc:'Mirae Asset MF',      cat:'Large Cap'          },
+  { id:'axis-bc',    name:'Axis Bluechip Fund',          amc:'Axis Mutual Fund',    cat:'Large Cap'          },
+  { id:'icici-tech', name:'ICICI Pru Technology Fund',   amc:'ICICI Prudential MF', cat:'Sectoral · Tech'   },
+  { id:'nippon-sc',  name:'Nippon India Small Cap',      amc:'Nippon India MF',     cat:'Small Cap'          },
+  { id:'hdfc-nifty', name:'HDFC Nifty 50 Index Fund',    amc:'HDFC Mutual Fund',    cat:'Index · Large Cap'  },
+  { id:'motilal-mid',name:'Motilal Oswal Midcap Fund',   amc:'Motilal Oswal MF',    cat:'Mid Cap'            },
+];
+
+// ── INIT ──
+function init() {
+  document.getElementById('header-avatar').textContent = userName.charAt(0).toUpperCase();
+  render();
+}
+
+// ── RENDER ──
+function render() {
+  const body = document.getElementById('wl-body');
+
+  // empty state
+  if (!funds.length) {
+    body.innerHTML = `
+      <div class="page-title-row" style="animation:fadeup .4s both;">
+        <div>
+          <div class="page-title">Watchlist</div>
+          <div class="page-subtitle">Your funds, all in one place</div>
+        </div>
+      </div>
+      <div class="empty-state" style="animation:fadeup .5s .1s both;">
+        <div class="empty-icon">📋</div>
+        <div class="empty-title">No funds yet</div>
+        <p class="empty-body">Add funds to your watchlist to track their unit prices and set alerts.</p>
+        <button class="btn-empty" onclick="navigate('feed')">Add Funds →</button>
+      </div>`;
+    return;
+  }
+
+  // summary bar values — read fresh alertConfig from localStorage
+  const freshAlertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+  const upCount   = funds.filter(f => (DEMO_PRICES[f.id]?.dir || 'up') === 'up').length;
+  const downCount = funds.filter(f => (DEMO_PRICES[f.id]?.dir || 'up') === 'down').length;
+  const totalAlerts = funds.reduce((acc, f) => {
+    const cfg = freshAlertConfig[f.id];
+    if (!cfg) return acc;
+    return acc + [cfg.drop?.on, cfg.rise?.on, cfg.manager?.on].filter(Boolean).length;
+  }, 0);
+
+  let html = `
+    <div class="page-title-row" style="animation:fadeup .4s both;">
+      <div>
+        <div class="page-title">Watchlist</div>
+        <div class="page-subtitle">${funds.length} fund${funds.length > 1 ? 's' : ''} being tracked</div>
+      </div>
+      <button class="btn-add-fund" onclick="toggleSearch()">＋ Add fund</button>
+    </div>
+
+    <!-- search section -->
+    <div class="search-section ${searchOpen ? 'open' : ''}" id="search-section">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="wl-search" type="text"
+          placeholder="Search funds to add..." autocomplete="off"/>
+        <div class="search-results" id="wl-search-results"></div>
+      </div>
+    </div>
+
+    <!-- summary bar -->
+    <div class="summary-bar" style="animation:fadeup .45s .05s both;">
+      <div class="sb-item">
+        <div class="sb-val blue">${funds.length}</div>
+        <div class="sb-lbl">Funds</div>
+      </div>
+      <div class="sb-item">
+        <div class="sb-val green">${upCount}</div>
+        <div class="sb-lbl">Up today</div>
+      </div>
+      <div class="sb-item">
+        <div class="sb-val red">${downCount}</div>
+        <div class="sb-lbl">Down today</div>
+      </div>
+      <div class="sb-item">
+        <div class="sb-val blue">${totalAlerts}</div>
+        <div class="sb-lbl">Active alerts</div>
+      </div>
+    </div>
+
+    <!-- fund cards -->
+    <div class="fund-list">`;
+
+  funds.forEach((f, i) => {
+    const price  = DEMO_PRICES[f.id] || { price:'—', change:'—', dir:'up' };
+    const meta   = FUND_META[f.id]   || { icon:'📊', accent:'accent-blue' };
+    // always read fresh from localStorage so it stays in sync with alerts screen
+    const freshConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+    const cfg    = freshConfig[f.id];
+    const alertCount = cfg
+      ? [cfg.drop?.on, cfg.rise?.on, cfg.manager?.on].filter(Boolean).length
+      : 0;
+    const hasAlerts = alertCount > 0;
+
+    html += `
+      <div class="fund-card ${meta.accent}" style="animation-delay:${i * 0.07}s;">
+        <div class="fund-card-inner">
+          <div class="fc-top">
+            <div class="fc-icon" style="background:rgba(255,255,255,.05);border:1px solid var(--cb);">${meta.icon}</div>
+            <div class="fc-title">
+              <div class="fc-name">${f.name}</div>
+              <div class="fc-meta">${f.cat} · ${f.amc}</div>
+            </div>
+            <button class="fc-remove" onclick="askRemove('${f.id}')" title="Remove fund">✕</button>
+          </div>
+
+          <div class="fc-price-row">
+            <div class="fc-price-group">
+              <div class="fc-price-label">Unit price today</div>
+              <div class="fc-price">${price.price}</div>
+            </div>
+            <div class="fc-change ${price.dir}">
+              <span class="fc-change-arrow">${price.dir === 'up' ? '▲' : '▼'}</span>
+              ${price.change}
+            </div>
+          </div>
+
+          <div class="fc-bottom">
+            <div class="fc-alert-status">
+              <div class="fc-alert-dot ${hasAlerts ? '' : 'none'}"></div>
+              <span class="fc-alert-count">${hasAlerts ? `${alertCount} alert${alertCount > 1 ? 's' : ''} active` : 'No alerts set'}</span>
+            </div>
+            <button class="fc-alerts-btn" onclick="goToAlerts('${f.id}')">
+              🔔 Manage alerts ›
+            </button>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  html += `</div><div style="height:8px;"></div>`;
+  body.innerHTML = html;
+
+  // wire up search if open
+  if (searchOpen) wireSearch();
+}
+
+// ── SEARCH ──
+function toggleSearch() {
+  searchOpen = !searchOpen;
+  render();
+  if (searchOpen) {
+    setTimeout(() => {
+      const inp = document.getElementById('wl-search');
+      if (inp) inp.focus();
+    }, 50);
+  }
+}
+
+function wireSearch() {
+  const inp = document.getElementById('wl-search');
+  const res = document.getElementById('wl-search-results');
+  if (!inp || !res) return;
+
+  inp.addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    if (!q) { res.classList.remove('show'); return; }
+    const matches = ALL_FUNDS.filter(f =>
+      f.name.toLowerCase().includes(q) ||
+      f.amc.toLowerCase().includes(q)  ||
+      f.cat.toLowerCase().includes(q)
+    ).slice(0, 6);
+
+    if (!matches.length) {
+      res.innerHTML = `<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>`;
+    } else {
+      res.innerHTML = matches.map(f => {
+        const already = funds.find(a => a.id === f.id);
+        return `<div class="search-result-item ${already ? 'is-added' : ''}"
+          onclick="${already ? '' : `addFund('${f.id}')`}">
+          <div>
+            <div class="sri-name">${f.name}</div>
+            <div class="sri-meta">${f.cat} · ${f.amc}</div>
+          </div>
+          ${already ? '<div class="sri-check">✓</div>' : ''}
+        </div>`;
+      }).join('');
+    }
+    res.classList.add('show');
+  });
+
+  document.addEventListener('click', function closeRes(e) {
+    if (!e.target.closest('.search-wrap')) {
+      res.classList.remove('show');
+      document.removeEventListener('click', closeRes);
+    }
+  });
+}
+
+// ── ADD FUND ──
+function addFund(id) {
+  if (funds.find(f => f.id === id)) return;
+  const fund = ALL_FUNDS.find(f => f.id === id);
+  if (!fund) return;
+  funds.push(fund);
+  saveFunds();
+  addToWatchlist(fund); // write to Supabase in background
+  searchOpen = false;
+  render();
+}
+
+function saveFunds() {
+  localStorage.setItem('fp_funds', JSON.stringify(funds));
+}
+
+// ── REMOVE FUND ──
+function askRemove(id) {
+  pendingRemoveId = id;
+  const fund = funds.find(f => f.id === id);
+  document.getElementById('confirm-fund-name').textContent = fund ? fund.name : 'This fund';
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm() {
+  pendingRemoveId = null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+function confirmRemove() {
+  if (!pendingRemoveId) return;
+  const removingId = pendingRemoveId;
+  funds = funds.filter(f => f.id !== removingId);
+  if (alertConfig[removingId]) {
+    delete alertConfig[removingId];
+    localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
+    deleteAlertConfig(removingId); // remove from Supabase in background
+  }
+  pendingRemoveId = null;
+  saveFunds();
+  removeFromWatchlist(removingId); // remove from Supabase in background
+  closeConfirm();
+  render();
+}
+
+// ── NAVIGATE TO ALERTS WITH FUND EXPANDED ──
+function goToAlerts(fundId) {
+  localStorage.setItem('fp_expand_fund', fundId);
+  window.location.href = 'alerts.html';
+}
+
+// ── NAVIGATION ──
+function navigate(tab) {
+  const paths = { feed:'feed.html', alerts:'alerts.html', settings:'settings.html' };
+  window.location.href = paths[tab] || 'feed.html';
+}
+
+// ── KEYBOARD ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeConfirm();
+});
+
+// ── BOOT ──
+async function boot() {
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  // load from localStorage first — instant render
+  const savedFunds = localStorage.getItem('fp_funds');
+  if (savedFunds) { try { funds = JSON.parse(savedFunds); } catch(e) {} }
+  const savedConfig = localStorage.getItem('fp_alert_config');
+  if (savedConfig) { try { alertConfig = JSON.parse(savedConfig); } catch(e) {} }
+
+  init(); // render immediately
+
+  // sync with Supabase in background
+  const rows = await fetchWatchlist();
+  if (rows.length) {
+    funds = rows.map(r => ({
+      id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
+    }));
+    localStorage.setItem('fp_funds', JSON.stringify(funds));
+  }
+  const sbConfig = await fetchAlertConfig();
+  if (Object.keys(sbConfig).length) {
+    alertConfig = sbConfig;
+    localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
+  }
+  render(); // silent refresh with latest data
+}
+
+// wait for supabase.js to signal ready, then boot
+window.addEventListener('supabase_ready', boot, { once: true });
+// if SDK already loaded (cached), fire immediately
+if (window._supabase) { setTimeout(boot, 0); }
+</script>
+</body>
+</html>
