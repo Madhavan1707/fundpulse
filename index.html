@@ -793,10 +793,39 @@ function showVerifyScreen(email, name) {
         </span>
       </div>
     </div>`;
-  // use auth state listener — works cross-device via Supabase realtime
+  // use polling to check if user has verified — works cross-device
+  // verified.html updates the profile when verification happens on any device
   if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
+
+  let pollTimer = setInterval(async () => {
+    try {
+      // check if a session now exists on this browser
+      const { data } = await window._supabase.auth.getSession();
+      if (data?.session) {
+        clearInterval(pollTimer);
+        if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
+        clearUserData();
+        const uname = data.session.user?.user_metadata?.full_name || 'there';
+        localStorage.setItem('fp_username', uname);
+        window.location.href = 'app/feed.html';
+        return;
+      }
+      // also try refreshing the session — this picks up cross-device verification
+      const { data: refreshed } = await window._supabase.auth.refreshSession();
+      if (refreshed?.session) {
+        clearInterval(pollTimer);
+        clearUserData();
+        const uname = refreshed.session.user?.user_metadata?.full_name || 'there';
+        localStorage.setItem('fp_username', uname);
+        window.location.href = 'app/feed.html';
+      }
+    } catch(e) { /* keep polling */ }
+  }, 3000);
+
+  // also listen for auth state changes on same device
   const { data } = window._supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' && session) {
+      clearInterval(pollTimer);
       if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
       clearUserData();
       const uname = session.user?.user_metadata?.full_name || 'there';
