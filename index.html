@@ -962,6 +962,7 @@ function ha(type){
       clearUserData();
       const name = data.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', name);
+      localStorage.setItem('fp_email', email);
       b.textContent = '✓ Welcome back!'; b.style.opacity = '1';
       b.style.background = 'var(--green)';
       b.style.boxShadow = '0 0 20px rgba(0,212,126,.45)';

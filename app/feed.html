@@ -903,12 +903,6 @@ function showOnboard() {
   showScreen('screen-onboard');
 }
 
-function openProfile() {
-  // TODO: Open user profile screen (funds, preferences, notification settings)
-  // Tracked in document as upcoming feature
-  alert('Profile screen coming soon! This will show your funds, preferences, and notification settings.');
-}
-
 function switchTab(tab, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
@@ -1238,6 +1232,10 @@ async function boot() {
       userName = sbName;
       updateNameDisplays();
     }
+    // store email for profile drawer
+    if (user.email) localStorage.setItem('fp_email', user.email);
+    // init profile drawer after we have user info
+    initProfileDrawer();
     // sync funds from Supabase in background
     const rows = await fetchWatchlist();
     if (rows.length) {

@@ -779,7 +779,7 @@ async function boot() {
   const session = await getSession();
   if (!session) { window.location.href = '../index.html'; return; }
 
-  // load from localStorage first — instant render, no flicker
+  // load from localStorage first — instant render
   const savedFunds = localStorage.getItem('fp_funds');
   if (savedFunds) { try { addedFunds = JSON.parse(savedFunds); } catch(e) {} }
   const savedConfig = localStorage.getItem('fp_alert_config');
@@ -787,6 +787,7 @@ async function boot() {
 
   // render immediately with local data
   init();
+  initProfileDrawer();
 
   // sync Supabase in background
   const rows = await fetchWatchlist();

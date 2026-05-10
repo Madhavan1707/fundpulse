@@ -719,6 +719,7 @@ async function boot() {
   if (savedConfig) { try { alertConfig = JSON.parse(savedConfig); } catch(e) {} }
 
   init(); // render immediately
+  initProfileDrawer();
 
   // sync with Supabase in background
   const rows = await fetchWatchlist();
