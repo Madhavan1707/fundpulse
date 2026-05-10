@@ -758,9 +758,18 @@ function render(){
 }
 
 // show "check your email" screen inside the modal
-function showVerifyScreen(email) {
-  document.getElementById('tl').className='mtab';
-  document.getElementById('ts').className='mtab';
+let pendingSignupEmail = '';
+let pendingSignupName  = '';
+let authListener = null;
+
+function showVerifyScreen(email, name) {
+  pendingSignupEmail = email;
+  pendingSignupName  = name;
+  // disable tabs — user is mid-verification
+  const tl = document.getElementById('tl');
+  const ts = document.getElementById('ts');
+  tl.className = 'mtab'; tl.style.opacity = '.35'; tl.style.pointerEvents = 'none';
+  ts.className = 'mtab'; ts.style.opacity = '.35'; ts.style.pointerEvents = 'none';
   document.getElementById('msub').textContent = 'One more step';
   document.getElementById('mform').innerHTML = `
     <div style="text-align:center;padding:8px 0 4px;">
@@ -771,39 +780,62 @@ function showVerifyScreen(email) {
         <b style="color:var(--white);">${email}</b><br/><br/>
         Click the link in the email — this page will automatically move forward the moment you verify.
       </p>
-      <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.72rem;color:var(--muted-2);margin-bottom:18px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);animation:dp 1.5s ease-in-out infinite;"></div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.72rem;color:var(--muted-2);margin-bottom:20px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);animation:dp 1.5s ease-in-out infinite;flex-shrink:0;"></div>
         Waiting for verification…
       </div>
-      <div style="font-size:.72rem;color:var(--muted-2);">
-        Didn't get it? <span style="color:var(--blue-light);cursor:pointer;" onclick="resendVerification('${email}')">Resend email</span>
+      <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+        <span style="font-size:.72rem;color:var(--muted-2);">
+          Wrong email? <span style="color:var(--blue-light);cursor:pointer;font-weight:500;" onclick="editEmail()">Edit &amp; resend</span>
+        </span>
+        <span style="font-size:.72rem;color:var(--muted-2);">
+          <span style="color:var(--blue-light);cursor:pointer;font-weight:500;" onclick="resendVerification('${email}')">Resend email</span>
+        </span>
       </div>
     </div>`;
-  // poll for session every 2 seconds — when user clicks the link, session appears
-  startVerificationPoll();
-}
-
-let verifyPollTimer = null;
-function startVerificationPoll() {
-  if (verifyPollTimer) clearInterval(verifyPollTimer);
-  verifyPollTimer = setInterval(async () => {
-    const { data } = await window._supabase.auth.getSession();
-    if (data?.session) {
-      clearInterval(verifyPollTimer);
-      // clear any previous user's data — fix Issue 4
+  // use auth state listener — works cross-device via Supabase realtime
+  if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
+  const { data } = window._supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
       clearUserData();
-      const name = data.session.user?.user_metadata?.full_name || 'there';
-      localStorage.setItem('fp_username', name);
+      const uname = session.user?.user_metadata?.full_name || 'there';
+      localStorage.setItem('fp_username', uname);
       window.location.href = 'app/feed.html';
     }
-  }, 2000);
+  });
+  authListener = data;
+}
+
+function editEmail() {
+  // re-enable tabs
+  const tl = document.getElementById('tl');
+  const ts = document.getElementById('ts');
+  tl.style.opacity = ''; tl.style.pointerEvents = ''; tl.onclick = () => switchTab('login');
+  ts.style.opacity = ''; ts.style.pointerEvents = ''; ts.onclick = () => switchTab('signup');
+  // stop listener
+  if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
+  // back to signup with details pre-filled
+  tab = 'signup';
+  document.getElementById('tl').className = 'mtab';
+  document.getElementById('ts').className = 'mtab on';
+  document.getElementById('msub').textContent = 'Start tracking your funds free';
+  document.getElementById('mform').innerHTML = `
+    <div class="mf"><label class="ml">Full name</label><input class="mi" type="text" placeholder="Your name" value="${pendingSignupName}"/></div>
+    <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com" value="${pendingSignupEmail}"/></div>
+    <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="Create a password"/></div>
+    <button class="mb" onclick="ha('signup')">Create Free Account</button>
+    <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
+  `;
 }
 
 async function resendVerification(email) {
   await window._supabase.auth.resend({ type: 'signup', email });
+  const el = event.target;
+  el.textContent = 'Sent ✓'; el.style.color = 'var(--green)';
+  setTimeout(() => { el.textContent = 'Resend email'; el.style.color = ''; }, 2500);
 }
 
-// Fix Issue 4: clear previous user's local data when a new session starts
 function clearUserData() {
   localStorage.removeItem('fp_funds');
   localStorage.removeItem('fp_alert_config');
@@ -812,28 +844,16 @@ function clearUserData() {
   localStorage.removeItem('fp_expand_fund');
 }
 
-// check on page load if this is a redirect back from email verification
+// on page load — if this is the verification redirect, send to verified.html
 loadSupabase(async (sb) => {
-  // Supabase puts the token in the URL hash after email verification
   const hash = window.location.hash;
-  if (hash && hash.includes('access_token')) {
-    // session is being set by Supabase from the URL — wait briefly then check
-    setTimeout(async () => {
-      const { data } = await sb.auth.getSession();
-      if (data?.session) {
-        clearUserData();
-        const name = data.session.user?.user_metadata?.full_name || 'there';
-        localStorage.setItem('fp_username', name);
-        window.location.href = 'app/feed.html';
-      }
-    }, 800);
+  if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
+    window.location.href = 'verified.html';
     return;
   }
-  // if already logged in and hits landing page — go straight to feed
+  // if already logged in — go straight to feed
   const { data } = await sb.auth.getSession();
-  if (data?.session) {
-    window.location.href = 'app/feed.html';
-  }
+  if (data?.session) { window.location.href = 'app/feed.html'; }
 });
 function showFieldError(input, msg) {
   input.style.borderColor = 'var(--red)';
@@ -887,8 +907,8 @@ function ha(type){
       }
       // store name locally
       localStorage.setItem('fp_username', capitaliseWords(name));
-      // show verify screen — wait for email click
-      showVerifyScreen(email);
+      // show verify screen — pass name for edit email pre-fill
+      showVerifyScreen(email, capitaliseWords(name));
     });
 
   } else {
