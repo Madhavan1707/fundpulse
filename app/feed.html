@@ -870,10 +870,8 @@ function showScreen(id) {
 function goAllSet() {
   if (!addedFunds.length) return;
   skipped = false;
-  const uid = localStorage.getItem('fp_uid') || 'anon';
-  localStorage.setItem('fp_funds_' + uid, JSON.stringify(addedFunds));
-  localStorage.setItem('fp_setup_done_' + uid, '1');
   localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+  localStorage.setItem('fp_setup_done', '1');
   addedFunds.forEach(f => addToWatchlist(f));
   const count = addedFunds.length;
   document.getElementById('allset-message').textContent =
@@ -886,8 +884,7 @@ function goAllSet() {
 function skipOnboard() {
   skipped = true;
   addedFunds = [];
-  const uid = localStorage.getItem('fp_uid') || 'anon';
-  localStorage.setItem('fp_setup_done_' + uid, '1');
+  localStorage.setItem('fp_setup_done', '1');
   showScreen('screen-feed');
   buildFeedFilters();
   loadFeed();
@@ -1198,86 +1195,75 @@ document.addEventListener('keydown', e => {
 
 // ── BOOT ──
 async function boot() {
+  // check auth — redirect if not logged in
   const session = await getSession();
   if (!session) { window.location.href = '../index.html'; return; }
 
-  const user = session.user;
-  const uid  = user.id;
+  // get name immediately from localStorage for fast render
+  const cachedName = localStorage.getItem('fp_username') || 'there';
+  userName = cachedName;
 
-  const KEY_NAME  = 'fp_username_' + uid;
-  const KEY_FUNDS = 'fp_funds_' + uid;
-  const KEY_SETUP = 'fp_setup_done_' + uid;
+  // load funds from localStorage first — instant, no flicker
+  const saved = localStorage.getItem('fp_funds');
+  const hasSetupBefore = localStorage.getItem('fp_setup_done') === '1';
 
-  const sbName = user.user_metadata?.full_name || localStorage.getItem(KEY_NAME) || 'there';
-  localStorage.setItem(KEY_NAME,  sbName);
-  localStorage.setItem('fp_username', sbName);
-  localStorage.setItem('fp_email',    user.email || '');
-  localStorage.setItem('fp_uid',      uid);
+  if (saved) {
+    try { addedFunds = JSON.parse(saved); } catch(e) { addedFunds = []; }
+  }
 
-  userName = sbName;
+  // show the right screen immediately based on local data
+  init();
 
-  // hide all screens while loading — prevents any flash
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  if (addedFunds.length > 0 || hasSetupBefore) {
+    // user has funds or has been through onboarding before — go to feed
+    skipped = hasSetupBefore && addedFunds.length === 0;
+    showScreen('screen-feed');
+    buildFeedFilters();
+    loadFeed();
+  }
+  // else: show onboarding (default screen is already active)
 
-  // safety net — if Supabase takes more than 6 seconds, fall back to localStorage
-  const fallback = setTimeout(() => {
-    const saved = localStorage.getItem(KEY_FUNDS);
-    addedFunds = saved ? JSON.parse(saved) : [];
-    const hasSetup = localStorage.getItem(KEY_SETUP) === '1';
-    init();
-    initProfileDrawer();
-    if (addedFunds.length > 0 || hasSetup) {
-      skipped = !addedFunds.length;
-      showScreen('screen-feed');
-      buildFeedFilters();
-      loadFeed();
-    } else {
-      showScreen('screen-onboard');
+  // sync with Supabase in background — update name and funds silently
+  const user = await getUser();
+  if (user) {
+    const sbName = user.user_metadata?.full_name;
+    if (sbName) {
+      localStorage.setItem('fp_username', sbName);
+      userName = sbName;
+      updateNameDisplays();
     }
-  }, 6000);
-
-  try {
+    // store email for profile drawer
+    if (user.email) localStorage.setItem('fp_email', user.email);
+    // init profile drawer after we have user info
+    initProfileDrawer();
+    // sync funds from Supabase in background
     const rows = await fetchWatchlist();
-    clearTimeout(fallback);
-
     if (rows.length) {
       addedFunds = rows.map(r => ({
         id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
       }));
-      localStorage.setItem(KEY_FUNDS, JSON.stringify(addedFunds));
-      localStorage.setItem(KEY_SETUP, '1');
-      init();
-      initProfileDrawer();
-      showScreen('screen-feed');
-      buildFeedFilters();
-      loadFeed();
-    } else {
-      clearTimeout(fallback);
-      const hasSetup = localStorage.getItem(KEY_SETUP) === '1';
-      addedFunds = [];
-      init();
-      initProfileDrawer();
-      if (hasSetup) {
-        skipped = true;
+      localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
+      localStorage.setItem('fp_setup_done', '1');
+      // if we showed onboarding but Supabase has funds, switch to feed
+      if (!document.getElementById('screen-feed').classList.contains('active')) {
         showScreen('screen-feed');
         buildFeedFilters();
         loadFeed();
       } else {
-        showScreen('screen-onboard');
+        buildFeedFilters();
       }
     }
-  } catch(e) {
-    clearTimeout(fallback);
-    console.error('Boot error:', e);
-    // on any error fall back to onboarding so user is never stuck
-    init();
-    initProfileDrawer();
-    showScreen('screen-onboard');
   }
+}
+
+// testing fallback
+if (!localStorage.getItem('fp_username')) {
+  localStorage.setItem('fp_username', 'Madhavan');
 }
 
 // wait for supabase.js to signal ready, then boot
 window.addEventListener('supabase_ready', boot, { once: true });
+// if SDK already loaded (cached), fire immediately
 if (window._supabase) { setTimeout(boot, 0); }
 </script>
 </body>

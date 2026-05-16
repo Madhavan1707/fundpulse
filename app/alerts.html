@@ -779,32 +779,35 @@ async function boot() {
   const session = await getSession();
   if (!session) { window.location.href = '../index.html'; return; }
 
-  const uid = session.user.id;
-  localStorage.setItem('fp_uid', uid);
-  localStorage.setItem('fp_username', session.user.user_metadata?.full_name || 'there');
-  localStorage.setItem('fp_email', session.user.email || '');
+  // load from localStorage first — instant render
+  const savedFunds = localStorage.getItem('fp_funds');
+  if (savedFunds) { try { addedFunds = JSON.parse(savedFunds); } catch(e) {} }
+  const savedConfig = localStorage.getItem('fp_alert_config');
+  if (savedConfig) { try { alertConfig = JSON.parse(savedConfig); } catch(e) {} }
 
+  // render immediately with local data
+  init();
   initProfileDrawer();
 
-  // always fetch fresh from Supabase — fixes sync issues
-  const [rows, sbConfig] = await Promise.all([fetchWatchlist(), fetchAlertConfig()]);
-
+  // sync Supabase in background
+  const rows = await fetchWatchlist();
   if (rows.length) {
     addedFunds = rows.map(r => ({
       id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
     }));
     localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
   }
+  const sbConfig = await fetchAlertConfig();
   if (Object.keys(sbConfig).length) {
     alertConfig = sbConfig;
     localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
+    render(); // re-render silently with fresh data
   }
-
-  init();
 }
 
 // wait for supabase.js to signal ready, then boot
 window.addEventListener('supabase_ready', boot, { once: true });
+// if SDK already loaded (cached), fire immediately
 if (window._supabase) { setTimeout(boot, 0); }
 </script>
 </body>
