@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
   <script src="supabase.js"></script>
+  <script src="mfapi.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -415,22 +416,11 @@
 const userName = localStorage.getItem('fp_username') || 'Madhavan';
 let funds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
 let alertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+let livePrices = {};
 let pendingRemoveId = null;
 let searchOpen = false;
+let _searchResults = [];
 
-// ── DEMO PRICE DATA ──
-const DEMO_PRICES = {
-  'sbi-psu':    { price:'₹28.34',  change:'-3.2%', dir:'down' },
-  'hdfc-flexi': { price:'₹142.80', change:'+1.4%', dir:'up'   },
-  'pp-flexi':   { price:'₹71.88',  change:'+2.1%', dir:'up'   },
-  'quant-sc':   { price:'₹214.50', change:'-1.8%', dir:'down' },
-  'mirae-lc':   { price:'₹98.42',  change:'+0.7%', dir:'up'   },
-  'axis-bc':    { price:'₹52.16',  change:'-0.4%', dir:'down' },
-  'icici-tech': { price:'₹188.70', change:'+3.4%', dir:'up'   },
-  'nippon-sc':  { price:'₹134.22', change:'-2.1%', dir:'down' },
-  'hdfc-nifty': { price:'₹188.92', change:'+0.9%', dir:'up'   },
-  'motilal-mid':{ price:'₹76.55',  change:'+1.2%', dir:'up'   },
-};
 
 const FUND_META = {
   'sbi-psu':    { icon:'🏭', accent:'accent-red'    },
@@ -489,8 +479,8 @@ function render() {
 
   // summary bar values — read fresh alertConfig from localStorage
   const freshAlertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
-  const upCount   = funds.filter(f => (DEMO_PRICES[f.id]?.dir || 'up') === 'up').length;
-  const downCount = funds.filter(f => (DEMO_PRICES[f.id]?.dir || 'up') === 'down').length;
+  const upCount   = funds.filter(f => livePrices[f.id]?.dir === 'up').length;
+  const downCount = funds.filter(f => livePrices[f.id]?.dir === 'down').length;
   const totalAlerts = funds.reduce((acc, f) => {
     const cfg = freshAlertConfig[f.id];
     if (!cfg) return acc;
@@ -540,7 +530,7 @@ function render() {
     <div class="fund-list">`;
 
   funds.forEach((f, i) => {
-    const price  = DEMO_PRICES[f.id] || { price:'—', change:'—', dir:'up' };
+    const price = livePrices[f.id] || { price: '—', change: '—', dir: 'up' };
     const meta   = FUND_META[f.id]   || { icon:'📊', accent:'accent-blue' };
     // always read fresh from localStorage so it stays in sync with alerts screen
     const freshConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
@@ -568,7 +558,7 @@ function render() {
               <div class="fc-price">${price.price}</div>
             </div>
             <div class="fc-change ${price.dir}">
-              <span class="fc-change-arrow">${price.dir === 'up' ? '▲' : '▼'}</span>
+              ${price.change !== '—' ? `<span class="fc-change-arrow">${price.dir === 'up' ? '▲' : '▼'}</span>` : ''}
               ${price.change}
             </div>
           </div>
@@ -610,28 +600,44 @@ function wireSearch() {
   const res = document.getElementById('wl-search-results');
   if (!inp || !res) return;
 
-  inp.addEventListener('input', function() {
-    const q = this.value.trim().toLowerCase();
+  let seq = 0;
+
+  inp.addEventListener('input', async function () {
+    const mySeq = ++seq;
+    const q = this.value.trim();
     if (!q) { res.classList.remove('show'); return; }
-    const matches = ALL_FUNDS.filter(f =>
-      f.name.toLowerCase().includes(q) ||
-      f.amc.toLowerCase().includes(q)  ||
-      f.cat.toLowerCase().includes(q)
-    ).slice(0, 6);
+
+    const ts = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
+    const cacheWarm = (Date.now() - ts) < 86400000;
+    if (!cacheWarm) {
+      res.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">Searching…</span></div>';
+      res.classList.add('show');
+    }
+
+    const matches = window.searchFunds
+      ? await searchFunds(q)
+      : ALL_FUNDS.filter(function (f) {
+          return f.name.toLowerCase().includes(q.toLowerCase()) || f.amc.toLowerCase().includes(q.toLowerCase());
+        }).slice(0, 7);
+
+    if (mySeq !== seq) return; // stale result — a newer query is in flight
+
+    _searchResults = matches;
 
     if (!matches.length) {
-      res.innerHTML = `<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>`;
+      res.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>';
     } else {
-      res.innerHTML = matches.map(f => {
-        const already = funds.find(a => a.id === f.id);
-        return `<div class="search-result-item ${already ? 'is-added' : ''}"
-          onclick="${already ? '' : `addFund('${f.id}')`}">
-          <div>
-            <div class="sri-name">${f.name}</div>
-            <div class="sri-meta">${f.cat} · ${f.amc}</div>
-          </div>
-          ${already ? '<div class="sri-check">✓</div>' : ''}
-        </div>`;
+      res.innerHTML = matches.map(function (f) {
+        const already = funds.find(function (a) { return a.id === f.id; });
+        const meta = f.cat ? f.cat + ' · ' + f.amc : f.amc;
+        return '<div class="search-result-item ' + (already ? 'is-added' : '') + '"' +
+          (already ? '' : ' onclick="addFund(\'' + f.id + '\')"') + '>' +
+          '<div>' +
+          '<div class="sri-name">' + f.name + '</div>' +
+          '<div class="sri-meta">' + meta + '</div>' +
+          '</div>' +
+          (already ? '<div class="sri-check">✓</div>' : '') +
+          '</div>';
       }).join('');
     }
     res.classList.add('show');
@@ -647,8 +653,9 @@ function wireSearch() {
 
 // ── ADD FUND ──
 function addFund(id) {
-  if (funds.find(f => f.id === id)) return;
-  const fund = ALL_FUNDS.find(f => f.id === id);
+  if (funds.find(function (f) { return f.id === id; })) return;
+  const fund = _searchResults.find(function (f) { return f.id === id; })
+             || ALL_FUNDS.find(function (f) { return f.id === id; });
   if (!fund) return;
   funds.push(fund);
   saveFunds();
@@ -707,6 +714,15 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeConfirm();
 });
 
+// ── LIVE NAV FETCH ──
+function loadLiveNAVs() {
+  if (!funds.length || !window.fetchNAVs) return;
+  fetchNAVs(funds).then(function (prices) {
+    livePrices = prices;
+    render();
+  }).catch(function () {});
+}
+
 // ── BOOT ──
 async function boot() {
   const session = await getSession();
@@ -735,12 +751,18 @@ async function boot() {
     localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
   }
   render(); // silent refresh with latest data
+  loadLiveNAVs(); // fetch live NAVs after data is settled
 }
 
 // wait for supabase.js to signal ready, then boot
 window.addEventListener('supabase_ready', boot, { once: true });
 // if SDK already loaded (cached), fire immediately
 if (window._supabase) { setTimeout(boot, 0); }
+
+// also fire loadLiveNAVs when mfapi signals ready (in case it loads after boot)
+window.addEventListener('mfapi_ready', function () {
+  if (funds.length) loadLiveNAVs();
+}, { once: true });
 </script>
 </body>
 </html>

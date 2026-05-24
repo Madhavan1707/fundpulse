@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
   <script src="supabase.js"></script>
+  <script src="mfapi.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -676,6 +677,7 @@ let readArticles = new Set();
 let bookmarkedArticles = new Set();
 let pendingRemoveFundId = null;
 let activeSheetArticleId = null;
+let _searchResults = [];
 
 // ── FUND DATA ──
 const FUNDS = [
@@ -746,29 +748,47 @@ function setLastUpdated() {
 const searchInput = document.getElementById('fund-search');
 const searchResultsEl = document.getElementById('search-results');
 
-searchInput.addEventListener('input', function() {
-  const q = this.value.trim().toLowerCase();
+let _feedSearchSeq = 0;
+searchInput.addEventListener('input', async function () {
+  const mySeq = ++_feedSearchSeq;
+  const q = this.value.trim();
   if (!q) { searchResultsEl.classList.remove('show'); return; }
-  const matches = FUNDS.filter(f =>
-    f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)
-  ).slice(0, 5);
+
+  const ts = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
+  const cacheWarm = (Date.now() - ts) < 86400000;
+  if (!cacheWarm) {
+    searchResultsEl.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">Searching…</span></div>';
+    searchResultsEl.classList.add('show');
+  }
+
+  const matches = window.searchFunds
+    ? await searchFunds(q)
+    : FUNDS.filter(function (f) {
+        return f.name.toLowerCase().includes(q.toLowerCase()) ||
+               f.amc.toLowerCase().includes(q.toLowerCase()) ||
+               f.cat.toLowerCase().includes(q.toLowerCase());
+      }).slice(0, 7);
+
+  if (mySeq !== _feedSearchSeq) return; // stale result
+  _searchResults = matches;
   renderSearchResults(matches);
 });
 
 function renderSearchResults(matches) {
   if (!matches.length) {
-    searchResultsEl.innerHTML = `<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>`;
+    searchResultsEl.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>';
   } else {
-    searchResultsEl.innerHTML = matches.map(f => {
-      const isAdded = addedFunds.find(a => a.id === f.id);
-      return `<div class="search-result-item ${isAdded ? 'is-added' : ''}"
-        onclick="${isAdded ? '' : `addFund('${f.id}')`}">
-        <div>
-          <div class="sri-name">${f.name}</div>
-          <div class="sri-meta">${f.cat} · ${f.amc}</div>
-        </div>
-        ${isAdded ? '<div class="sri-added-check">✓</div>' : ''}
-      </div>`;
+    searchResultsEl.innerHTML = matches.map(function (f) {
+      const isAdded = addedFunds.find(function (a) { return a.id === f.id; });
+      const meta = f.cat ? f.cat + ' · ' + f.amc : f.amc;
+      return '<div class="search-result-item ' + (isAdded ? 'is-added' : '') + '"' +
+        (isAdded ? '' : ' onclick="addFund(\'' + f.id + '\')"') + '>' +
+        '<div>' +
+        '<div class="sri-name">' + f.name + '</div>' +
+        '<div class="sri-meta">' + meta + '</div>' +
+        '</div>' +
+        (isAdded ? '<div class="sri-added-check">✓</div>' : '') +
+        '</div>';
     }).join('');
   }
   searchResultsEl.classList.add('show');
@@ -780,17 +800,30 @@ document.addEventListener('click', e => {
 
 // ── ADD FUND ──
 function addFund(id) {
-  if (addedFunds.find(f => f.id === id)) return;
-  const fund = FUNDS.find(f => f.id === id);
+  if (addedFunds.find(function (f) { return f.id === id; })) return;
+  const fund = _searchResults.find(function (f) { return f.id === id; })
+             || FUNDS.find(function (f) { return f.id === id; });
   if (!fund) return;
   addedFunds.push(fund);
   localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
-  // also write to Supabase in background
   addToWatchlist(fund);
   updateAddedList();
   updateContinueBtn();
-  const q = searchInput.value.trim().toLowerCase();
-  if (q) renderSearchResults(FUNDS.filter(f => f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q)).slice(0, 5));
+  const q = searchInput.value.trim();
+  if (q) {
+    if (window.searchFunds) {
+      const mySeq = ++_feedSearchSeq;
+      searchFunds(q).then(function (results) {
+        if (mySeq !== _feedSearchSeq) return;
+        _searchResults = results;
+        renderSearchResults(results);
+      });
+    } else {
+      renderSearchResults(FUNDS.filter(function (f) {
+        return f.name.toLowerCase().includes(q.toLowerCase()) || f.amc.toLowerCase().includes(q.toLowerCase());
+      }).slice(0, 5));
+    }
+  }
 }
 
 function updateAddedList() {
@@ -1254,6 +1287,7 @@ async function boot() {
       }
     }
   }
+  if (window.prefetchFundList) prefetchFundList();
 }
 
 // testing fallback
@@ -1265,6 +1299,10 @@ if (!localStorage.getItem('fp_username')) {
 window.addEventListener('supabase_ready', boot, { once: true });
 // if SDK already loaded (cached), fire immediately
 if (window._supabase) { setTimeout(boot, 0); }
+
+window.addEventListener('mfapi_ready', function () {
+  if (window.prefetchFundList) prefetchFundList();
+}, { once: true });
 </script>
 </body>
 </html>
