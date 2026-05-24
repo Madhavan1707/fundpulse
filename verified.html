@@ -81,13 +81,13 @@
         await sb.from('profiles').update({ full_name: name }).eq('id', session.user.id);
 
         document.getElementById('msg').textContent =
-          'Your email is confirmed! You can now go back to the tab where you signed up — it will load automatically. Or open FundPulse directly on this device.';
+          'Your email is confirmed! You can now sign in — go back to FundPulse and reload the page, or open it on this device.';
         document.getElementById('continue-btn').style.display = 'inline-block';
         document.getElementById('note').textContent =
-          'If you signed up on another device, that page will navigate forward within a few seconds.';
+          'Confirmed on a different device? Just reload the sign-up page and sign in with your email and password.';
       } else {
         document.getElementById('msg').textContent =
-          'Email confirmed! Click below to open FundPulse.';
+          'Email confirmed! Reload the sign-up page to sign in, or open FundPulse directly on this device.';
         document.getElementById('continue-btn').style.display = 'inline-block';
       }
     };

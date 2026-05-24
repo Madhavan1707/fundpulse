@@ -778,12 +778,9 @@ function showVerifyScreen(email, name) {
       <p style="font-size:.8rem;color:var(--muted);line-height:1.7;margin-bottom:18px;">
         We sent a verification link to<br/>
         <b style="color:var(--white);">${email}</b><br/><br/>
-        Click the link in the email — this page will automatically move forward the moment you verify.
+        Click the link in the email, then reload this page to sign in.
       </p>
-      <div style="display:flex;align-items:center;justify-content:center;gap:8px;font-size:.72rem;color:var(--muted-2);margin-bottom:20px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);animation:dp 1.5s ease-in-out infinite;flex-shrink:0;"></div>
-        Waiting for verification…
-      </div>
+      <button onclick="window.location.reload()" style="display:block;margin:0 auto 20px;padding:9px 22px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">Reload page</button>
       <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
         <span style="font-size:.72rem;color:var(--muted-2);">
           Wrong email? <span style="color:var(--blue-light);cursor:pointer;font-weight:500;" onclick="editEmail()">Edit &amp; resend</span>
@@ -793,39 +790,10 @@ function showVerifyScreen(email, name) {
         </span>
       </div>
     </div>`;
-  // use polling to check if user has verified — works cross-device
-  // verified.html updates the profile when verification happens on any device
+  // listen for auth state changes — fires automatically if user confirms in the same browser
   if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
-
-  let pollTimer = setInterval(async () => {
-    try {
-      // check if a session now exists on this browser
-      const { data } = await window._supabase.auth.getSession();
-      if (data?.session) {
-        clearInterval(pollTimer);
-        if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
-        clearUserData();
-        const uname = data.session.user?.user_metadata?.full_name || 'there';
-        localStorage.setItem('fp_username', uname);
-        window.location.href = 'app/feed.html';
-        return;
-      }
-      // also try refreshing the session — this picks up cross-device verification
-      const { data: refreshed } = await window._supabase.auth.refreshSession();
-      if (refreshed?.session) {
-        clearInterval(pollTimer);
-        clearUserData();
-        const uname = refreshed.session.user?.user_metadata?.full_name || 'there';
-        localStorage.setItem('fp_username', uname);
-        window.location.href = 'app/feed.html';
-      }
-    } catch(e) { /* keep polling */ }
-  }, 3000);
-
-  // also listen for auth state changes on same device
   const { data } = window._supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' && session) {
-      clearInterval(pollTimer);
       if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
       clearUserData();
       const uname = session.user?.user_metadata?.full_name || 'there';
