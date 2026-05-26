@@ -2,6 +2,11 @@
 
 function buildEmail({ fundName, fundCat, type, todayNav, pctChange, threshold, appUrl }) {
   const isDown  = type === 'drop';
+  if (!Number.isFinite(todayNav) || !Number.isFinite(pctChange)) {
+    throw new TypeError('todayNav and pctChange must be finite numbers');
+  }
+  if (isDown && pctChange > 0) throw new RangeError('pctChange must be negative for type "drop"');
+  if (!isDown && pctChange < 0) throw new RangeError('pctChange must be positive for type "rise"');
   const icon    = isDown ? '📉' : '📈';
   const arrow   = isDown ? '▼' : '▲';
   const color   = isDown ? '#ff4060' : '#00d47e';

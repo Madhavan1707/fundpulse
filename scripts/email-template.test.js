@@ -48,3 +48,17 @@ test('html contains view watchlist link', () => {
   });
   assert.ok(html.includes('https://myapp.vercel.app/app/watchlist.html'));
 });
+
+test('throws if pctChange sign mismatches type', () => {
+  assert.throws(
+    () => buildEmail({ fundName: 'X', fundCat: '', type: 'drop', todayNav: 50, pctChange: 3.5, threshold: 3, appUrl: 'https://x.com' }),
+    { name: 'RangeError' }
+  );
+});
+
+test('throws if todayNav is not a finite number', () => {
+  assert.throws(
+    () => buildEmail({ fundName: 'X', fundCat: '', type: 'drop', todayNav: NaN, pctChange: -3.5, threshold: 3, appUrl: 'https://x.com' }),
+    { name: 'TypeError' }
+  );
+});
