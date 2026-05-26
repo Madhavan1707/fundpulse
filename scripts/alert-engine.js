@@ -84,3 +84,97 @@ async function sendEmail(to, subject, html, resendKey, fromEmail) {
   if (!res.ok) throw new Error(`Resend error for ${to}: ${res.status} ${await res.text()}`);
   return res.json();
 }
+
+// ── MAIN ──
+
+async function main() {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const RESEND_KEY   = process.env.RESEND_API_KEY;
+  const FROM_EMAIL   = process.env.RESEND_FROM_EMAIL;
+  const APP_URL      = process.env.APP_URL || 'https://fundpulse.vercel.app';
+
+  if (!SUPABASE_URL || !SERVICE_KEY || !RESEND_KEY || !FROM_EMAIL) {
+    console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL');
+    process.exit(1);
+  }
+
+  console.log('FundPulse Alert Engine starting...');
+
+  // Step 1: fetch data in parallel
+  const [alertConfigs, watchlistRows, userEmails] = await Promise.all([
+    fetchAlertConfigs(SUPABASE_URL, SERVICE_KEY),
+    fetchWatchlist(SUPABASE_URL, SERVICE_KEY),
+    fetchUserEmails(SUPABASE_URL, SERVICE_KEY),
+  ]);
+
+  console.log(`Loaded: ${alertConfigs.length} alert configs | ${watchlistRows.length} watchlist rows | ${Object.keys(userEmails).length} users`);
+
+  // build fund name/cat lookup: "userId:fundId" → name/cat
+  const fundNameMap = {};
+  const fundCatMap  = {};
+  for (const row of watchlistRows) {
+    const key = `${row.user_id}:${row.fund_id}`;
+    fundNameMap[key] = row.fund_name;
+    fundCatMap[key]  = row.fund_cat;
+  }
+
+  // Step 2: fetch NAVs for unique funds in parallel
+  const uniqueFundIds = [...new Set(alertConfigs.map(r => r.fund_id))];
+  const navEntries = await Promise.all(
+    uniqueFundIds.map(async (fundId) => {
+      const code = resolveSchemeCode(fundId);
+      if (!code) { console.warn(`  ⚠ Cannot resolve scheme code for fund: ${fundId}`); return [fundId, null]; }
+      const nav = await fetchNAV(code).catch(() => null);
+      if (!nav) { console.warn(`  ⚠ NAV fetch failed for: ${fundId} (scheme ${code})`); return [fundId, null]; }
+      console.log(`  NAV ${fundId}: ₹${nav.todayNav.toFixed(2)} (${nav.pctChange.toFixed(2)}%)`);
+      return [fundId, nav];
+    })
+  );
+  const navMap = Object.fromEntries(navEntries);
+
+  // Steps 3+4: check thresholds + send emails
+  let sent   = 0;
+  let errors = 0;
+
+  for (const config of alertConfigs) {
+    const nav = navMap[config.fund_id];
+    if (!nav) continue;
+
+    const triggers = checkThresholds(config, nav.pctChange);
+    if (!triggers.length) continue;
+
+    const email = userEmails[config.user_id];
+    if (!email) { console.warn(`  ⚠ No email found for user: ${config.user_id}`); continue; }
+
+    const key      = `${config.user_id}:${config.fund_id}`;
+    const fundName = fundNameMap[key] || config.fund_id;
+    const fundCat  = fundCatMap[key]  || '';
+
+    for (const type of triggers) {
+      const threshold = type === 'drop' ? config.drop_val : config.rise_val;
+      try {
+        const { subject, html } = buildEmail({
+          fundName, fundCat, type,
+          todayNav:  nav.todayNav,
+          pctChange: nav.pctChange,
+          threshold,
+          appUrl: APP_URL,
+        });
+        await sendEmail(email, subject, html, RESEND_KEY, FROM_EMAIL);
+        console.log(`  ✓ Sent ${type} alert → ${email} (${fundName}: ${nav.pctChange.toFixed(2)}%)`);
+        sent++;
+      } catch (err) {
+        console.error(`  ✗ Failed → ${email} (${fundName}): ${err.message}`);
+        errors++;
+      }
+    }
+  }
+
+  console.log(`\nDone. ${sent} email(s) sent, ${errors} error(s).`);
+  if (sent === 0 && errors > 0) process.exit(1);
+}
+
+if (require.main === module) {
+  main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });
+}
