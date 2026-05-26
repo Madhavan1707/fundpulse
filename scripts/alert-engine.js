@@ -133,6 +133,12 @@ async function main() {
   );
   const navMap = Object.fromEntries(navEntries);
 
+  const nullNavCount = navEntries.filter(([, nav]) => nav === null).length;
+  if (uniqueFundIds.length > 0 && nullNavCount === uniqueFundIds.length) {
+    console.error('  ✗ All NAV fetches failed — mfapi.in may be down. No alerts evaluated.');
+    process.exit(1);
+  }
+
   // Steps 3+4: check thresholds + send emails
   let sent   = 0;
   let errors = 0;
