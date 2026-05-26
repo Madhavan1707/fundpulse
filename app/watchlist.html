@@ -662,6 +662,7 @@ function addFund(id) {
   addToWatchlist(fund); // write to Supabase in background
   searchOpen = false;
   render();
+  loadLiveNAVs();
 }
 
 function saveFunds() {
