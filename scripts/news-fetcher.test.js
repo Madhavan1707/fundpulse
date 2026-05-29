@@ -46,6 +46,7 @@ test('formatArticle: maps NewsData.io shape to DB row shape', () => {
   const result = formatArticle(raw, SAMPLE_FUNDS);
   assert.equal(result.article_id,  'abc123');
   assert.equal(result.title,       'HDFC Flexi Cap Fund gains on rally');
+  assert.equal(result.description, 'Strong quarterly returns reported');
   assert.equal(result.source_name, 'economictimes');
   assert.equal(result.url,         'https://example.com/article');
   assert.ok(result.published_at.startsWith('2026'));

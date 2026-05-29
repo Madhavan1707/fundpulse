@@ -1,6 +1,5 @@
 'use strict';
 
-// ── ENV ──
 const SUPABASE_URL         = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const NEWSDATA_API_KEY     = process.env.NEWSDATA_API_KEY;
@@ -10,8 +9,6 @@ const SB_HEADERS = {
   'apikey':        SUPABASE_SERVICE_KEY,
   'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
 };
-
-// ── PURE FUNCTIONS (exported for tests) ──
 
 const STOP_WORDS = new Set([
   'fund', 'funds', 'direct', 'small', 'large', 'india', 'nifty',
@@ -48,11 +45,9 @@ function formatArticle(raw, funds) {
   };
 }
 
-// ── I/O FUNCTIONS ──
-
 async function fetchUniqueFunds() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/watchlist?select=fund_id,fund_name,fund_amc`,
+    `${SUPABASE_URL}/rest/v1/watchlist?select=fund_id,fund_name,fund_amc&limit=2000`,
     { headers: SB_HEADERS }
   );
   if (!res.ok) throw new Error(`watchlist fetch failed: ${res.status}`);
@@ -77,7 +72,7 @@ async function fetchNewsArticles(query) {
   return json.results || [];
 }
 
-async function upsertArticles(articles) {
+async function insertNewArticles(articles) {
   if (!articles.length) return;
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/news?on_conflict=article_id`,
@@ -89,7 +84,7 @@ async function upsertArticles(articles) {
   );
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`upsert failed: ${res.status} ${body}`);
+    throw new Error(`insert failed: ${res.status} ${body}`);
   }
 }
 
@@ -101,8 +96,6 @@ async function deleteOldArticles() {
   );
   if (!res.ok) console.warn(`cleanup skipped: ${res.status}`);
 }
-
-// ── MAIN ──
 
 async function main() {
   console.log('=== FundPulse News Fetcher ===');
@@ -128,8 +121,8 @@ async function main() {
   console.log(`${recent.length} articles within 48h`);
 
   const formatted = recent.map(a => formatArticle(a, funds));
-  await upsertArticles(formatted);
-  console.log(`Upserted ${formatted.length} articles (duplicates silently skipped)`);
+  await insertNewArticles(formatted);
+  console.log(`Inserted ${formatted.length} articles (existing skipped)`);
 
   await deleteOldArticles();
   console.log('Old articles cleaned up');
