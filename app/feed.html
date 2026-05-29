@@ -919,7 +919,7 @@ function goAllSet() {
   addedFunds.forEach(f => addToWatchlist(f));
   const count = addedFunds.length;
   document.getElementById('allset-message').textContent =
-    `From this moment on, FundPulse is watching ${count === 1 ? 'your fund' : `all ${count} of your funds`} so you don't have to. Your personalised news feed is ready — we'll alert you the moment something moves.`;
+    `From this moment on, FundPulse is watching ${count === 1 ? 'your fund' : `all ${count} of your funds`} so you don't have to. Your personalised news feed is ready — we'll alert you the moment something moves. News for your funds will start appearing within 2 hours.`;
   document.getElementById('allset-chips').innerHTML =
     addedFunds.map(f => `<div class="allset-chip"><b>${f.name.split(' ').slice(0,3).join(' ')}</b></div>`).join('');
   showScreen('screen-allset');

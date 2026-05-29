@@ -360,6 +360,18 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--navy-3); border: 1px solid var(--cb);
+      color: var(--white); font-size: .8rem; line-height: 1.4;
+      padding: 10px 16px; border-radius: 12px; z-index: 500;
+      max-width: 320px; width: calc(100% - 40px); text-align: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s, transform .25s;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     @media(min-width: 520px) {
       .app-screen    { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
       .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
@@ -395,6 +407,9 @@
     </button>
   </nav>
 </div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
 
 <!-- CONFIRM REMOVE MODAL -->
 <div class="confirm-overlay" id="confirm-overlay">
@@ -652,6 +667,16 @@ function wireSearch() {
   });
 }
 
+// ── TOAST ──
+let _toastTimer = null;
+function showToast(msg, ms) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { el.classList.remove('show'); }, ms || 4000);
+}
+
 // ── ADD FUND ──
 function addFund(id) {
   if (funds.find(function (f) { return f.id === id; })) return;
@@ -664,6 +689,7 @@ function addFund(id) {
   searchOpen = false;
   render();
   loadLiveNAVs();
+  showToast('Fund added. News for this fund will appear within 2 hours.', 5000);
 }
 
 function saveFunds() {
