@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FundPulse — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
+  <script src="supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #070c18; --navy-2: #0b1220; --navy-3: #0f1a2e; --navy-4: #142038;
+      --blue: #2360f5; --blue-light: #4a7cff; --blue-dim: rgba(35,96,245,0.12);
+      --green: #00d47e; --red: #ff4060; --red-dim: rgba(255,64,96,0.12);
+      --yellow: #ffb400;
+      --white: #edf2ff; --muted: #7a8fb0; --muted-2: #4a5878;
+      --card: rgba(255,255,255,0.04); --cb: rgba(255,255,255,0.08);
+    }
+    html, body { height: 100%; }
+    body { background: var(--navy); color: var(--white); font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 400; -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+    .screen { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+    .app-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid var(--cb); background: rgba(7,12,24,0.96); backdrop-filter: blur(20px); flex-shrink: 0; position: relative; z-index: 10; }
+    .app-logo { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; display: flex; align-items: center; gap: 8px; color: var(--white); text-decoration: none; }
+    .logo-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: dp 2.2s ease-in-out infinite; }
+    @keyframes dp { 0%,100%{box-shadow:0 0 6px var(--blue);}50%{box-shadow:0 0 14px var(--blue),0 0 28px rgba(35,96,245,.6);} }
+    .header-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--blue), #0a1f5c); border: 1.5px solid rgba(35,96,245,.4); display: flex; align-items: center; justify-content: center; font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .78rem; color: var(--white); cursor: pointer; }
+
+    .bottom-nav { display: flex; align-items: center; background: rgba(11,18,32,0.97); border-top: 1px solid var(--cb); backdrop-filter: blur(20px); flex-shrink: 0; }
+    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 8px; gap: 4px; cursor: pointer; transition: all .2s; border: none; background: none; color: var(--muted-2); font-family: 'Plus Jakarta Sans', sans-serif; }
+    .nav-item.active { color: var(--blue); }
+    .nav-icon { font-size: 1.15rem; line-height: 1; }
+    .nav-label { font-size: .6rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--blue); margin-top: 2px; opacity: 0; transition: opacity .2s; }
+    .nav-item.active .nav-dot { opacity: 1; }
+
+    .settings-body { flex: 1; overflow-y: auto; padding: 20px 16px 24px; }
+    .settings-body::-webkit-scrollbar { width: 3px; }
+    .settings-body::-webkit-scrollbar-thumb { background: var(--navy-4); border-radius: 3px; }
+
+    .settings-section { margin-bottom: 24px; }
+    .settings-section-label { display: block; font-size: .65rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 8px; padding: 0 4px; }
+    .settings-card { background: var(--navy-3); border: 1px solid var(--cb); border-radius: 14px; overflow: hidden; }
+    .settings-sep { height: 1px; background: var(--cb); margin: 0 16px; }
+
+    .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+    .settings-row-btn { cursor: pointer; transition: background .18s; }
+    .settings-row-btn:hover { background: rgba(255,255,255,.04); }
+    .settings-row-danger .settings-row-title { color: var(--red); }
+    .settings-row-disabled { opacity: .45; pointer-events: none; }
+    .settings-row-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .settings-row-icon { font-size: 1.1rem; flex-shrink: 0; }
+    .settings-row-title { font-size: .88rem; font-weight: 500; color: var(--white); margin-bottom: 2px; }
+    .settings-row-sub { font-size: .72rem; color: var(--muted); line-height: 1.4; }
+    .settings-badge { font-size: .6rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-2); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 100px; padding: 2px 7px; margin-left: 6px; vertical-align: middle; }
+    .settings-chevron { color: var(--muted-2); font-size: 1.1rem; flex-shrink: 0; }
+
+    .toggle { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--muted-2); border-radius: 26px; transition: background .25s; cursor: pointer; }
+    .toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; border-radius: 50%; background: white; left: 3px; top: 3px; transition: transform .25s; }
+    .toggle input:checked + .toggle-slider { background: var(--blue); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+    .toggle input:disabled + .toggle-slider { cursor: not-allowed; }
+
+    .settings-number-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .settings-number { width: 52px; background: var(--navy-4); border: 1px solid var(--cb); border-radius: 8px; padding: 7px 10px; color: var(--white); font-family: 'Outfit', sans-serif; font-size: .92rem; font-weight: 600; text-align: center; outline: none; transition: border-color .2s; -moz-appearance: textfield; }
+    .settings-number::-webkit-inner-spin-button, .settings-number::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .settings-number:focus { border-color: var(--blue); }
+    .settings-number-suffix { font-size: .85rem; color: var(--muted); }
+
+    .confirm-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(4,9,18,.8); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+    .confirm-overlay.open { opacity: 1; pointer-events: all; }
+    .confirm-modal { background: var(--navy-3); border: 1px solid var(--cb); border-radius: 18px; padding: 28px 24px; width: 100%; max-width: 340px; transform: scale(.94); transition: transform .28s cubic-bezier(.34,1.56,.64,1); }
+    .confirm-overlay.open .confirm-modal { transform: scale(1); }
+    .confirm-icon { font-size: 2rem; margin-bottom: 12px; display: block; text-align: center; }
+    .confirm-title { font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.05rem; text-align: center; margin-bottom: 8px; }
+    .confirm-body { font-size: .82rem; color: var(--muted); line-height: 1.65; text-align: center; margin-bottom: 22px; }
+    .confirm-actions { display: flex; gap: 10px; }
+    .confirm-cancel { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--cb); background: transparent; color: var(--white); font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 500; cursor: pointer; transition: background .2s; }
+    .confirm-cancel:hover { background: rgba(255,255,255,.06); }
+    .confirm-delete { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,64,96,.2); background: var(--red-dim); color: var(--red); font-family: 'Plus Jakarta Sans', sans-serif; font-size: .88rem; font-weight: 600; cursor: pointer; transition: all .2s; }
+    .confirm-delete:hover { background: var(--red); color: #fff; }
+
+    .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--navy-3); border: 1px solid var(--cb); border-radius: 100px; padding: 10px 20px; font-size: .78rem; color: var(--white); z-index: 800; pointer-events: none; opacity: 0; transition: opacity .25s; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+
+    @media(min-width: 520px) {
+      .screen { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+      .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="screen" id="screen-settings">
+  <div class="app-header">
+    <a class="app-logo" href="#"><span class="logo-dot"></span>FundPulse</a>
+    <div class="header-avatar" id="header-avatar" onclick="openProfileDrawer()">M</div>
+  </div>
+
+  <div class="settings-body">
+
+    <div class="settings-section">
+      <span class="settings-section-label">Notifications</span>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">📧</span>
+            <div>
+              <div class="settings-row-title">Email alerts</div>
+              <div class="settings-row-sub">Get notified when a fund moves past your threshold</div>
+            </div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="email-toggle" checked onchange="onSettingChange()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-sep"></div>
+        <div class="settings-row settings-row-disabled">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">💬</span>
+            <div>
+              <div class="settings-row-title">WhatsApp alerts<span class="settings-badge">Phase 4</span></div>
+              <div class="settings-row-sub">Add your number to get WhatsApp notifications</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <span class="settings-section-label">Alert defaults</span>
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">📉</span>
+            <div>
+              <div class="settings-row-title">Drop alert</div>
+              <div class="settings-row-sub">Notify me if unit price drops more than</div>
+            </div>
+          </div>
+          <div class="settings-number-wrap">
+            <input type="number" class="settings-number" id="default-drop" min="1" max="20" value="3" onchange="onSettingChange()">
+            <span class="settings-number-suffix">%</span>
+          </div>
+        </div>
+        <div class="settings-sep"></div>
+        <div class="settings-row">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">📈</span>
+            <div>
+              <div class="settings-row-title">Rise alert</div>
+              <div class="settings-row-sub">Notify me if unit price rises more than</div>
+            </div>
+          </div>
+          <div class="settings-number-wrap">
+            <input type="number" class="settings-number" id="default-rise" min="1" max="20" value="2" onchange="onSettingChange()">
+            <span class="settings-number-suffix">%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <span class="settings-section-label">Appearance</span>
+      <div class="settings-card">
+        <div class="settings-row settings-row-disabled">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">🌙</span>
+            <div>
+              <div class="settings-row-title">Dark mode<span class="settings-badge">Only option</span></div>
+              <div class="settings-row-sub">Light mode coming soon</div>
+            </div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" checked disabled>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <span class="settings-section-label">Account</span>
+      <div class="settings-card">
+        <div class="settings-row settings-row-btn" onclick="sendPasswordReset()">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">🔑</span>
+            <div>
+              <div class="settings-row-title">Change password</div>
+              <div class="settings-row-sub">We'll email you a reset link</div>
+            </div>
+          </div>
+          <span class="settings-chevron">›</span>
+        </div>
+        <div class="settings-sep"></div>
+        <div class="settings-row settings-row-btn settings-row-danger" onclick="showDeleteModal()">
+          <div class="settings-row-left">
+            <span class="settings-row-icon">🗑️</span>
+            <div>
+              <div class="settings-row-title">Delete account</div>
+              <div class="settings-row-sub">Permanently remove your account and all data</div>
+            </div>
+          </div>
+          <span class="settings-chevron">›</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="switchTab('feed',this)">
+      <span class="nav-icon">📰</span><span class="nav-label">Feed</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="switchTab('alerts',this)">
+      <span class="nav-icon">🔔</span><span class="nav-label">Alerts</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item" onclick="switchTab('watchlist',this)">
+      <span class="nav-icon">📋</span><span class="nav-label">Watchlist</span><span class="nav-dot"></span>
+    </button>
+    <button class="nav-item active" onclick="switchTab('settings',this)">
+      <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span><span class="nav-dot"></span>
+    </button>
+  </nav>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-modal">
+    <span class="confirm-icon">⚠️</span>
+    <div class="confirm-title">Delete your account?</div>
+    <p class="confirm-body">This will permanently delete your watchlist, all alerts, and your profile. This cannot be undone.</p>
+    <div class="confirm-actions">
+      <button class="confirm-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="confirm-delete" id="confirm-delete-btn" onclick="doDeleteAccount()">Yes, delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let _settings = { email_alerts_on: true, default_drop_val: 3, default_rise_val: 2, whatsapp_number: null };
+
+function readFormValues() {
+  return {
+    email_alerts_on:  document.getElementById('email-toggle').checked,
+    default_drop_val: parseFloat(document.getElementById('default-drop').value) || 3,
+    default_rise_val: parseFloat(document.getElementById('default-rise').value) || 2,
+    whatsapp_number:  null,
+  };
+}
+
+function applySettingsToForm(s) {
+  document.getElementById('email-toggle').checked      = s.email_alerts_on !== false;
+  document.getElementById('default-drop').value        = s.default_drop_val ?? 3;
+  document.getElementById('default-rise').value        = s.default_rise_val ?? 2;
+}
+
+function onSettingChange() {
+  _settings = readFormValues();
+  localStorage.setItem('fp_settings', JSON.stringify(_settings));
+  saveSettings(_settings);
+  showToast('Saved');
+}
+
+function showToast(msg, duration) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration || 1500);
+}
+
+async function sendPasswordReset() {
+  const email = localStorage.getItem('fp_email');
+  if (!email) { showToast('Email not found — try logging out and back in'); return; }
+  const { error } = await window._supabase.auth.resetPasswordForEmail(email);
+  if (error) { showToast('Could not send reset email'); return; }
+  showToast('Reset link sent to your email', 2500);
+}
+
+function showDeleteModal() {
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeDeleteModal() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+  const btn = document.getElementById('confirm-delete-btn');
+  btn.textContent = 'Yes, delete';
+  btn.style.opacity = '';
+  btn.style.pointerEvents = '';
+}
+
+async function doDeleteAccount() {
+  const btn = document.getElementById('confirm-delete-btn');
+  btn.textContent = 'Deleting…';
+  btn.style.opacity = '.65';
+  btn.style.pointerEvents = 'none';
+  try {
+    const user = await getUser();
+    if (user) {
+      await window._supabase.from('watchlist').delete().eq('user_id', user.id);
+      await window._supabase.from('alert_config').delete().eq('user_id', user.id);
+      await window._supabase.from('profiles').delete().eq('id', user.id);
+    }
+  } catch (e) { console.error('data deletion error:', e); }
+  await signOut();
+}
+
+function switchTab(tab, el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  const paths = { feed: 'feed.html', alerts: 'alerts.html', watchlist: 'watchlist.html' };
+  if (tab !== 'settings') window.location.href = paths[tab];
+}
+
+async function boot() {
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  const initial = (localStorage.getItem('fp_username') || 'U').charAt(0).toUpperCase();
+  document.getElementById('header-avatar').textContent = initial;
+
+  try {
+    const cached = JSON.parse(localStorage.getItem('fp_settings'));
+    if (cached) { _settings = cached; applySettingsToForm(cached); }
+  } catch (e) {}
+
+  initProfileDrawer();
+
+  const fresh = await fetchSettings();
+  if (fresh) {
+    _settings = { ..._settings, ...fresh };
+    localStorage.setItem('fp_settings', JSON.stringify(_settings));
+    applySettingsToForm(_settings);
+  }
+}
+
+window.addEventListener('supabase_ready', boot, { once: true });
+if (window._supabase) setTimeout(boot, 0);
+</script>
+</body>
+</html>
