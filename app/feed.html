@@ -1044,6 +1044,12 @@ function filterFeed(filterId, el) {
   renderNews(filterId);
 }
 
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
 function renderNews(filterId) {
   let articles = [...liveNews];
 
@@ -1079,16 +1085,16 @@ function renderNews(filterId) {
         <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
           id="card-${n.article_id}"
           style="animation:fadeup .4s ${i * 0.06}s both;"
-          onclick="openSheet('${n.article_id}')">
+          onclick="openSheet(${JSON.stringify(n.article_id)})">
           <div class="bookmark-tag">Saved</div>
           <div class="unread-dot"></div>
           <div class="news-card-top">
             <span class="news-fund-tag ${tagColor}">${tagLabel}</span>
             <span class="news-time">${time}</span>
           </div>
-          <div class="news-headline">${n.title || ''}</div>
+          <div class="news-headline">${esc(n.title)}</div>
           <div class="news-source">
-            <span>${n.source_name || 'News'}</span>
+            <span>${esc(n.source_name) || 'News'}</span>
             <span class="news-source-dot"></span>
             <span>${time}</span>
           </div>
