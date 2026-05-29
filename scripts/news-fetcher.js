@@ -1,5 +1,18 @@
 'use strict';
 
+// ── ENV ──
+const SUPABASE_URL         = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const NEWSDATA_API_KEY     = process.env.NEWSDATA_API_KEY;
+
+const SB_HEADERS = {
+  'Content-Type':  'application/json',
+  'apikey':        SUPABASE_SERVICE_KEY,
+  'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+};
+
+// ── PURE FUNCTIONS (exported for tests) ──
+
 const STOP_WORDS = new Set([
   'fund', 'funds', 'direct', 'small', 'large', 'india', 'nifty',
   'asset', 'flexi', 'midcap', 'bluechip', 'cap', 'plan', 'growth', 'index',
@@ -35,4 +48,95 @@ function formatArticle(raw, funds) {
   };
 }
 
+// ── I/O FUNCTIONS ──
+
+async function fetchUniqueFunds() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/watchlist?select=fund_id,fund_name,fund_amc`,
+    { headers: SB_HEADERS }
+  );
+  if (!res.ok) throw new Error(`watchlist fetch failed: ${res.status}`);
+  const rows = await res.json();
+  const seen = new Set();
+  return rows.filter(r => {
+    if (seen.has(r.fund_id)) return false;
+    seen.add(r.fund_id);
+    return true;
+  });
+}
+
+async function fetchNewsArticles(query) {
+  const url =
+    `https://newsdata.io/api/1/news` +
+    `?apikey=${NEWSDATA_API_KEY}` +
+    `&country=in&category=business` +
+    `&q=${encodeURIComponent(query)}&language=en`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`NewsData fetch failed (${query}): ${res.status}`);
+  const json = await res.json();
+  return json.results || [];
+}
+
+async function upsertArticles(articles) {
+  if (!articles.length) return;
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/news?on_conflict=article_id`,
+    {
+      method:  'POST',
+      headers: { ...SB_HEADERS, 'Prefer': 'resolution=ignore-duplicates' },
+      body:    JSON.stringify(articles),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`upsert failed: ${res.status} ${body}`);
+  }
+}
+
+async function deleteOldArticles() {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/news?published_at=lt.${encodeURIComponent(cutoff)}`,
+    { method: 'DELETE', headers: SB_HEADERS }
+  );
+  if (!res.ok) console.warn(`cleanup skipped: ${res.status}`);
+}
+
+// ── MAIN ──
+
+async function main() {
+  console.log('=== FundPulse News Fetcher ===');
+
+  const funds = await fetchUniqueFunds();
+  console.log(`${funds.length} unique funds loaded`);
+
+  const [mfRaw, etfRaw] = await Promise.all([
+    fetchNewsArticles('mutual fund'),
+    fetchNewsArticles('ETF india'),
+  ]);
+
+  const seen = new Set();
+  const deduped = [...mfRaw, ...etfRaw].filter(a => {
+    if (!a.article_id || seen.has(a.article_id)) return false;
+    seen.add(a.article_id);
+    return true;
+  });
+  console.log(`${deduped.length} unique raw articles`);
+
+  const cutoff48h = Date.now() - 48 * 60 * 60 * 1000;
+  const recent = deduped.filter(a => !a.pubDate || new Date(a.pubDate).getTime() > cutoff48h);
+  console.log(`${recent.length} articles within 48h`);
+
+  const formatted = recent.map(a => formatArticle(a, funds));
+  await upsertArticles(formatted);
+  console.log(`Upserted ${formatted.length} articles (duplicates silently skipped)`);
+
+  await deleteOldArticles();
+  console.log('Old articles cleaned up');
+  console.log('=== Done ===');
+}
+
 module.exports = { matchFundTags, formatArticle };
+if (require.main === module) {
+  main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });
+}
