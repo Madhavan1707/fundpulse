@@ -355,37 +355,15 @@
     /* news list */
     .news-list { display: flex; flex-direction: column; padding: 10px 16px; gap: 0; }
 
-    /* ── SWIPEABLE CARD WRAPPER ── */
-    .swipe-wrapper {
-      position: relative; margin-bottom: 10px; border-radius: 14px;
-      overflow: hidden; user-select: none;
-    }
-    /* behind-card action reveals */
-    .swipe-action {
-      position: absolute; top: 0; bottom: 0; width: 80px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-    }
-    .swipe-action-left { left: 0; background: rgba(255,180,0,.28); color: var(--yellow); border-radius: 14px 0 0 14px; }
-    .swipe-action-right { right: 0; background: rgba(255,64,96,.28); color: var(--red); border-radius: 0 14px 14px 0; }
-    .swipe-action-icon { font-size: 1.3rem; }
-
     /* NEWS CARD */
     .news-card {
       background: var(--navy-3); border: 1px solid var(--cb);
       border-radius: 14px; padding: 16px; cursor: pointer;
       transition: border-color .22s, box-shadow .22s;
       position: relative; overflow: hidden;
-      transform: translateX(0); transition: transform .25s ease;
-      will-change: transform;
+      margin-bottom: 10px;
     }
     .news-card:hover { border-color: rgba(35,96,245,.22); box-shadow: 0 4px 20px rgba(0,0,0,.2); }
-    .news-card.swiping { transition: none; }
-    .news-card.snap-back { transition: transform .3s cubic-bezier(.4,0,.2,1); }
-    .news-card.dismissed {
-      opacity: 0; transform: translateX(110%) !important;
-      transition: opacity .3s, transform .3s;
-    }
     .news-card.bookmarked-anim { animation: flashBookmark .4s ease; }
     @keyframes flashBookmark {
       0%,100%{ border-color: var(--cb); }
@@ -410,9 +388,21 @@
     }
     .news-card.is-bookmarked .bookmark-tag { display: block; }
 
+    /* bookmark button on card */
+    .card-bm-btn {
+      position: absolute; top: 12px; right: 12px;
+      background: transparent; border: none; padding: 4px 6px;
+      font-size: .95rem; cursor: pointer; opacity: 0.35;
+      border-radius: 8px; transition: opacity .18s, background .18s;
+      touch-action: manipulation; line-height: 1;
+    }
+    .news-card:hover .card-bm-btn,
+    .card-bm-btn.active { opacity: 1; }
+    .card-bm-btn.active { background: rgba(255,180,0,.12); }
+
     .news-card-top {
       display: flex; align-items: flex-start; justify-content: space-between;
-      gap: 12px; margin-bottom: 10px; padding-right: 16px;
+      gap: 12px; margin-bottom: 10px; padding-right: 34px;
     }
     .news-fund-tag {
       font-size: .6rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -984,10 +974,6 @@ async function loadFeed() {
   document.getElementById('news-list').style.display    = 'flex';
   renderNews(activeFilter);
 
-  if (!localStorage.getItem('fp_swipe_tutored') && liveNews.length) {
-    localStorage.setItem('fp_swipe_tutored', '1');
-    setTimeout(playSwipeTutorial, 800);
-  }
 }
 
 function askRemoveFundFromFeed(event, id) {
@@ -999,43 +985,6 @@ function askRemoveFundFromFeed(event, id) {
   document.getElementById('confirm-overlay').classList.add('open');
 }
 
-function playSwipeTutorial() {
-  const firstWrap = document.querySelector('.swipe-wrapper');
-  if (!firstWrap) return;
-  const card = firstWrap.querySelector('.news-card');
-  if (!card) return;
-
-  // make sure the wrapper clips correctly
-  firstWrap.style.overflow = 'hidden';
-
-  // Step 1: slide LEFT — reveal dismiss (red) background
-  setTimeout(() => {
-    card.style.transition = 'transform .6s cubic-bezier(.4,0,.2,1)';
-    card.style.transform  = 'translateX(-80px)';
-  }, 400);
-
-  // Step 2: snap back to centre
-  setTimeout(() => {
-    card.style.transform = 'translateX(0)';
-  }, 1300);
-
-  // Step 3: slide RIGHT — reveal bookmark (gold) background
-  setTimeout(() => {
-    card.style.transform = 'translateX(80px)';
-  }, 1900);
-
-  // Step 4: snap back
-  setTimeout(() => {
-    card.style.transform = 'translateX(0)';
-  }, 2800);
-
-  // Step 5: cleanup
-  setTimeout(() => {
-    card.style.transition = '';
-    card.style.transform  = '';
-    firstWrap.style.overflow = '';
-  }, 3400);
-}
 
 function filterFeed(filterId, el) {
   activeFilter = filterId;
@@ -1100,85 +1049,23 @@ function renderNews(filterId) {
       </div>`;
   }).join('');
 
-  articles.forEach(n => initSwipe(n.article_id));
-}
-
-// ── SWIPE LOGIC ──
-function initSwipe(articleId) {
-  const card = document.getElementById(`card-${articleId}`);
-  if (!card) return;
-  let startX = 0, currentX = 0, isDragging = false;
-
-  function onStart(e) {
-    startX = e.touches ? e.touches[0].clientX : e.clientX;
-    isDragging = true;
-    card.classList.add('swiping');
-  }
-  function onMove(e) {
-    if (!isDragging) return;
-    currentX = (e.touches ? e.touches[0].clientX : e.clientX) - startX;
-    card.style.transform = `translateX(${currentX}px)`;
-  }
-  function onEnd() {
-    if (!isDragging) return;
-    isDragging = false;
-    card.classList.remove('swiping');
-    const threshold = 80;
-    if (currentX > threshold) {
-      // swipe right → bookmark
-      bookmarkArticle(articleId);
-      card.classList.add('snap-back');
-      card.style.transform = '';
-    } else if (currentX < -threshold) {
-      // swipe left → dismiss
-      dismissArticle(articleId);
-    } else {
-      card.classList.add('snap-back');
-      card.style.transform = '';
-      setTimeout(() => card.classList.remove('snap-back'), 300);
-    }
-    currentX = 0;
-  }
-
-  card.addEventListener('touchstart', onStart, { passive: true });
-  card.addEventListener('touchmove',  onMove,  { passive: true });
-  card.addEventListener('touchend',   onEnd);
-  card.addEventListener('mousedown',  onStart);
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup',  onEnd);
 }
 
 function bookmarkArticle(id) {
   const card = document.getElementById(`card-${id}`);
   if (!card) return;
+  const btn = card.querySelector('.card-bm-btn');
   if (bookmarkedArticles.has(id)) {
     bookmarkedArticles.delete(id);
     card.classList.remove('is-bookmarked');
+    if (btn) { btn.classList.remove('active'); btn.title = 'Save for later'; }
   } else {
     bookmarkedArticles.add(id);
-    card.classList.add('is-bookmarked');
-    card.classList.add('bookmarked-anim');
+    card.classList.add('is-bookmarked', 'bookmarked-anim');
     setTimeout(() => card.classList.remove('bookmarked-anim'), 400);
+    if (btn) { btn.classList.add('active'); btn.title = 'Remove bookmark'; }
   }
-  card.classList.add('snap-back');
-  card.style.transform = '';
-  // update sheet bookmark button if open
   if (activeSheetArticleId === id) updateSheetBookmarkBtn();
-}
-
-function dismissArticle(id) {
-  const card = document.getElementById(`card-${id}`);
-  const wrap = document.getElementById(`wrap-${id}`);
-  if (!card || !wrap) return;
-  card.classList.add('dismissed');
-  setTimeout(() => {
-    wrap.style.maxHeight = wrap.offsetHeight + 'px';
-    wrap.style.transition = 'max-height .35s ease, margin .35s ease, opacity .35s ease';
-    wrap.style.opacity = '0';
-    wrap.style.maxHeight = '0';
-    wrap.style.marginBottom = '0';
-    setTimeout(() => wrap.remove(), 360);
-  }, 300);
 }
 
 // ── ARTICLE SHEET ──
@@ -1282,8 +1169,10 @@ async function boot() {
   // sync with Supabase in background — update name and funds silently
   const user = await getUser();
   if (user) {
-    const sbName = user.user_metadata?.full_name;
-    if (sbName) {
+    // use profiles table for name (updated by saveProfileName), not auth metadata (set at signup only)
+    const profile = await fetchProfile();
+    const sbName = profile?.full_name || user.user_metadata?.full_name;
+    if (sbName && sbName !== userName) {
       localStorage.setItem('fp_username', sbName);
       userName = sbName;
       updateNameDisplays();
@@ -1329,3 +1218,4 @@ window.addEventListener('mfapi_ready', function () {
 </script>
 </body>
 </html>
+

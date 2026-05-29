@@ -98,6 +98,7 @@ function initProfileDrawer() {
         display: flex; align-items: center; gap: 14px;
         padding: 13px 22px; cursor: pointer;
         transition: background .18s;
+        touch-action: manipulation; -webkit-tap-highlight-color: transparent;
       }
       .fp-drawer-item:hover { background: rgba(255,255,255,.04); }
       .fp-drawer-icon {
@@ -414,6 +415,8 @@ async function saveProfileName(fullName) {
     .from('profiles')
     .upsert({ id: user.id, full_name: fullName }, { onConflict: 'id' });
   if (error) console.error('saveProfileName:', error);
+  // Keep auth metadata in sync so post-login refresh picks up the new name
+  await window._supabase.auth.updateUser({ data: { full_name: fullName } });
 }
 
 // ── SESSION GUARD ──

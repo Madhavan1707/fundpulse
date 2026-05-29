@@ -141,7 +141,10 @@
         .slice(0, 7);
     }
     return list
-      .filter(f => f.schemeName.toLowerCase().includes(q))
+      .filter(f => {
+        const n = f.schemeName.toLowerCase();
+        return n.includes(q) && n.includes('direct') && n.includes('growth');
+      })
       .slice(0, 7)
       .map(f => ({
         id:         String(f.schemeCode),

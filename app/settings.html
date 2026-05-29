@@ -347,6 +347,14 @@ async function boot() {
   }
 }
 
+function scrollToHash() {
+  const hash = location.hash.replace('#', '');
+  if (!hash) return;
+  const el = document.getElementById('section-' + hash);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+window.addEventListener('hashchange', scrollToHash);
 window.addEventListener('supabase_ready', boot, { once: true });
 if (window._supabase) setTimeout(boot, 0);
 </script>
