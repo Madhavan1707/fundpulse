@@ -426,10 +426,10 @@ const RECENT_HISTORY = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(0,5);
 const OLDER_HISTORY  = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(5);
 
 // ── INIT ──
-function init() {
-  document.getElementById('header-avatar').textContent = userName.charAt(0).toUpperCase();
-
-  // ensure every added fund has a config entry — all OFF by default
+// Reads current defaults from fp_settings and:
+// - creates a config entry for funds that have none
+// - updates val for any alert that is still OFF (so it stays in sync with global defaults)
+function applyDefaultConfigs() {
   let savedSettings = {};
   try { savedSettings = JSON.parse(localStorage.getItem('fp_settings')) || {}; } catch (e) {}
   const defDrop = String(savedSettings.default_drop_val ?? 3);
@@ -442,8 +442,17 @@ function init() {
         manager: { on: false },
         channels: ['email'],
       };
+    } else {
+      // keep custom values if the alert is ON, otherwise always reflect latest default
+      if (!alertConfig[f.id].drop.on) alertConfig[f.id].drop.val = defDrop;
+      if (!alertConfig[f.id].rise.on) alertConfig[f.id].rise.val = defRise;
     }
   });
+}
+
+function init() {
+  document.getElementById('header-avatar').textContent = userName.charAt(0).toUpperCase();
+  applyDefaultConfigs();
   saveConfig();
   render();
 }
@@ -550,6 +559,7 @@ function historyItemHTML(h) {
 // ── FUND CARD ──
 function fundCardHTML(fund, idx) {
   const cfg = alertConfig[fund.id];
+  if (!cfg) return '';
   const isExpanded = expandedFund === fund.id;
   const activeCount = [cfg.drop.on, cfg.rise.on, cfg.manager.on].filter(Boolean).length;
   const fcolor = FUND_COLORS[fund.id] || { bg:'rgba(35,96,245,.1)', icon:'📊' };
@@ -804,6 +814,8 @@ async function boot() {
   const sbConfig = await fetchAlertConfig();
   if (Object.keys(sbConfig).length) {
     alertConfig = sbConfig;
+    // re-apply defaults for any fund Supabase returned without a config entry
+    applyDefaultConfigs();
     localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
     render(); // re-render silently with fresh data
   }

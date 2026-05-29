@@ -370,14 +370,9 @@
       50%{ border-color: var(--yellow); box-shadow: 0 0 16px rgba(255,180,0,.3); }
     }
 
-    /* unread dot */
-    .unread-dot {
-      position: absolute; top: 14px; right: 14px;
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--blue); box-shadow: 0 0 6px rgba(35,96,245,.6);
-      transition: opacity .3s;
-    }
-    .news-card.read .unread-dot { opacity: 0; }
+    /* unread indicator — subtle left border */
+    .news-card:not(.read) { border-left: 3px solid rgba(35,96,245,0.6); }
+    .news-card.read { border-left: 1px solid var(--cb); }
 
     /* bookmark indicator */
     .bookmark-tag {
@@ -1025,26 +1020,24 @@ function renderNews(filterId) {
     const isBookmarked = bookmarkedArticles.has(n.article_id);
     const time = relativeTime(n.published_at);
     return `
-      <div class="swipe-wrapper" id="wrap-${n.article_id}">
-        <div class="swipe-action swipe-action-left"><span class="swipe-action-icon">🔖</span><span>Save</span></div>
-        <div class="swipe-action swipe-action-right"><span class="swipe-action-icon">✕</span><span>Dismiss</span></div>
-        <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
-          id="card-${n.article_id}"
-          style="animation:fadeup .4s ${i * 0.06}s both;"
+      <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
+        id="card-${n.article_id}"
+        style="animation:fadeup .4s ${i * 0.06}s both;"
+        data-article-id="${esc(n.article_id)}"
+        onclick="openSheet(this.dataset.articleId)">
+        <div class="bookmark-tag">Saved</div>
+        <button class="card-bm-btn ${isBookmarked ? 'active' : ''}" title="${isBookmarked ? 'Remove bookmark' : 'Save for later'}"
           data-article-id="${esc(n.article_id)}"
-          onclick="openSheet(this.dataset.articleId)">
-          <div class="bookmark-tag">Saved</div>
-          <div class="unread-dot"></div>
-          <div class="news-card-top">
-            <span class="news-fund-tag ${tagColor}">${tagLabel}</span>
-            <span class="news-time">${time}</span>
-          </div>
-          <div class="news-headline">${esc(n.title)}</div>
-          <div class="news-source">
-            <span>${esc(n.source_name) || 'News'}</span>
-            <span class="news-source-dot"></span>
-            <span>${time}</span>
-          </div>
+          onclick="event.stopPropagation();bookmarkArticle(this.dataset.articleId)">&#x1F516;</button>
+        <div class="news-card-top">
+          <span class="news-fund-tag ${tagColor}">${tagLabel}</span>
+          <span class="news-time">${time}</span>
+        </div>
+        <div class="news-headline">${esc(n.title)}</div>
+        <div class="news-source">
+          <span>${esc(n.source_name) || 'News'}</span>
+          <span class="news-source-dot"></span>
+          <span>${time}</span>
         </div>
       </div>`;
   }).join('');

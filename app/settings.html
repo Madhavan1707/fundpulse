@@ -72,6 +72,10 @@
     .settings-number:focus { border-color: var(--blue); }
     .settings-number-suffix { font-size: .85rem; color: var(--muted); }
 
+    .settings-save-row { display: flex; justify-content: flex-end; padding: 10px 4px 0; }
+    .settings-save-btn { background: var(--blue); color: #fff; border: none; border-radius: 10px; padding: 10px 22px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: .85rem; font-weight: 600; cursor: pointer; transition: background .18s; touch-action: manipulation; }
+    .settings-save-btn:hover { background: var(--blue-light); }
+
     .confirm-overlay { position: fixed; inset: 0; z-index: 400; background: rgba(4,9,18,.8); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity .25s; }
     .confirm-overlay.open { opacity: 1; pointer-events: all; }
     .confirm-modal { background: var(--navy-3); border: 1px solid var(--cb); border-radius: 18px; padding: 28px 24px; width: 100%; max-width: 340px; transform: scale(.94); transition: transform .28s cubic-bezier(.34,1.56,.64,1); }
@@ -145,7 +149,7 @@
             </div>
           </div>
           <div class="settings-number-wrap">
-            <input type="number" class="settings-number" id="default-drop" min="1" max="20" value="3" onchange="onSettingChange()">
+            <input type="number" class="settings-number" id="default-drop" min="1" max="20" value="3">
             <span class="settings-number-suffix">%</span>
           </div>
         </div>
@@ -159,10 +163,13 @@
             </div>
           </div>
           <div class="settings-number-wrap">
-            <input type="number" class="settings-number" id="default-rise" min="1" max="20" value="2" onchange="onSettingChange()">
+            <input type="number" class="settings-number" id="default-rise" min="1" max="20" value="2">
             <span class="settings-number-suffix">%</span>
           </div>
         </div>
+      </div>
+      <div class="settings-save-row">
+        <button class="settings-save-btn" onclick="saveAlertDefaults()">Save defaults</button>
       </div>
     </div>
 
@@ -267,6 +274,28 @@ function onSettingChange() {
   localStorage.setItem('fp_settings', JSON.stringify(_settings));
   saveSettings(_settings);
   showToast('Saved');
+}
+
+function saveAlertDefaults() {
+  _settings = readFormValues();
+  localStorage.setItem('fp_settings', JSON.stringify(_settings));
+  saveSettings(_settings);
+
+  // propagate new defaults into fp_alert_config for every fund with an OFF alert
+  try {
+    const config = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+    const funds  = JSON.parse(localStorage.getItem('fp_funds') || '[]');
+    const defDrop = String(_settings.default_drop_val ?? 3);
+    const defRise = String(_settings.default_rise_val ?? 2);
+    funds.forEach(f => {
+      if (!config[f.id]) return;
+      if (!config[f.id].drop?.on) config[f.id].drop.val = defDrop;
+      if (!config[f.id].rise?.on) config[f.id].rise.val = defRise;
+    });
+    localStorage.setItem('fp_alert_config', JSON.stringify(config));
+  } catch (e) {}
+
+  showToast('Defaults saved — alerts page updated');
 }
 
 function showToast(msg, duration) {
