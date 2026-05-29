@@ -59,3 +59,28 @@ test('formatArticle: handles null description and missing date', () => {
   assert.equal(result.published_at, null);
   assert.ok(result.fund_tags.includes('sbi-psu'));
 });
+
+test('matchFundTags: generic word "fund" does not match everything', () => {
+  // "fund" alone should not match — it's a stopword
+  const tags = matchFundTags('Mutual fund industry sees record inflows', '', SAMPLE_FUNDS);
+  assert.deepEqual(tags, []);
+});
+
+test('matchFundTags: AMC match requires both brand words to prevent collision', () => {
+  // "Axis Bank results" — "axis" appears but "mutual" does not → should NOT match axis-bc
+  const fundsWithAxis = [{ fund_id: 'axis-bc', fund_name: 'Axis Bluechip Fund', fund_amc: 'Axis Mutual Fund' }];
+  const tags = matchFundTags('Axis Bank Q4 results disappoint', 'Banking sector news', fundsWithAxis);
+  assert.deepEqual(tags, []);
+});
+
+test('matchFundTags: AMC two-word match works when both words present', () => {
+  const fundsWithAxis = [{ fund_id: 'axis-bc', fund_name: 'Axis Bluechip Fund', fund_amc: 'Axis Mutual Fund' }];
+  const tags = matchFundTags('Axis Mutual Fund announces new SIP plan', '', fundsWithAxis);
+  assert.ok(tags.includes('axis-bc'));
+});
+
+test('formatArticle: handles malformed pubDate without throwing', () => {
+  const raw = { article_id: 'xyz', title: 'Test', description: null, pubDate: 'not-a-date' };
+  const result = formatArticle(raw, SAMPLE_FUNDS);
+  assert.equal(result.published_at, null);
+});
