@@ -672,6 +672,7 @@
 let userName = '';
 let addedFunds = [];
 let skipped = false;
+let liveNews = [];
 let activeFilter = 'all';
 let readArticles = new Set();
 let bookmarkedArticles = new Set();
@@ -693,19 +694,6 @@ const FUNDS = [
   { id:'motilal-mid',name:'Motilal Oswal Midcap Fund',   amc:'Motilal Oswal MF',    cat:'Mid Cap',             color:'tag-green'  },
 ];
 
-// ── NEWS DATA (jargon-free: unit price instead of NAV, total fund money instead of AUM) ──
-const NEWS = [
-  { id:1,  fund:'sbi-psu',    headline:'Govt delays PSU sell-off plan — SBI PSU Fund unit price falls 3.2% in a single day',           source:'Economic Times',   time:'2 hours ago',  alert:{type:'down',val:'−3.2%'}, summary:'The government announced a delay in its planned sale of stakes in three major public sector companies, citing weak market conditions. SBI PSU Direct Fund, which holds significant exposure to BHEL, NTPC, and Coal India, saw its unit price drop sharply as markets reacted to the news.' },
-  { id:2,  fund:'pp-flexi',   headline:'Parag Parikh Flexi Cap raises US tech holdings to 28% as rupee weakens against dollar',         source:'Mint',             time:'4 hours ago',  alert:null,                       summary:'PPFAS Mutual Fund has increased its international holdings in the Flexi Cap scheme, now holding meaningful stakes in Alphabet and Meta. This move works as a hedge against the rupee losing value against the dollar, which has been happening recently.' },
-  { id:3,  fund:'hdfc-nifty', headline:'Nifty 50 crosses 24,000 mark for first time in 6 months — index fund holders benefit',          source:'Business Standard',time:'5 hours ago',  alert:{type:'up',val:'+1.1%'},   summary:'The Nifty 50 index crossed the 24,000 level for the first time since November, driven by strong buying from foreign investors and positive signals from global markets. HDFC Nifty 50 Index Fund investors saw a 1.1% rise in their unit price as a result.' },
-  { id:4,  fund:'quant-sc',   headline:'SEBI examines Quant Mutual Fund over alleged unfair trading — fund unit prices turn volatile',   source:'CNBCTV18',         time:'6 hours ago',  alert:{type:'down',val:'−1.8%'}, summary:'India\'s markets regulator is reportedly looking into trading activity at Quant Mutual Fund over concerns of unfair practices. The fund house has denied any wrongdoing, but investor confidence has been shaken, causing unit prices across its schemes including the Small Cap Fund to dip.' },
-  { id:5,  fund:'axis-bc',    headline:'Axis Bluechip Fund gets new investment head after high-profile fund manager departure',          source:'Value Research',   time:'Yesterday',    alert:null,                       summary:'Axis Mutual Fund has appointed a new head of investments for its equity funds following the departure of well-known fund manager Jinesh Gopani. Investors in Axis Bluechip have been closely watching this transition since the fund\'s approach was heavily influenced by his concentrated investment style.' },
-  { id:6,  fund:'hdfc-flexi', headline:'HDFC Flexi Cap adds Zomato and Jio Financial to its top holdings for the first time',           source:'Mint',             time:'Yesterday',    alert:null,                       summary:'HDFC Mutual\'s flagship flexible fund has made notable new bets, picking up stakes in Zomato and the newly listed Jio Financial Services. The fund has reduced its long-standing heavy holding in HDFC Bank in favour of newer growth companies.' },
-  { id:7,  fund:'mirae-lc',   headline:'Mirae Asset Large Cap beats its target index for 3rd quarter in a row',                         source:'Economic Times',   time:'2 days ago',   alert:null,                       summary:'Mirae Asset Large Cap Fund has outperformed the Nifty 100 for three consecutive quarters, generating 2.4% more return than the index. Its higher-than-usual bets on private banks and technology companies have been the main reason behind this consistent performance.' },
-  { id:8,  fund:'sbi-psu',    headline:'Coal India quarterly profit beats expectations — good news for PSU-focused funds',               source:'Business Standard',time:'2 days ago',   alert:null,                       summary:'Coal India posted quarterly earnings well above what analysts expected, driven by higher selling prices and better operations. This is positive news for investors in funds with high public sector company exposure, including SBI PSU Direct Fund where Coal India is a major holding.' },
-  { id:9,  fund:'nippon-sc',  headline:'Small company funds see ₹4,200 crore pulled out in April — selling pressure builds',            source:'CNBCTV18',         time:'3 days ago',   alert:{type:'down',val:'−2.1%'}, summary:'Industry data shows large net withdrawals from the small company mutual fund category in April — the highest monthly outflow since October 2022. Nippon India Small Cap, one of the biggest funds in this space, saw its unit price drop as investors sold off their holdings.' },
-  { id:10, fund:'icici-tech', headline:'Global tech rally lifts ICICI Pru Technology Fund — AI excitement drives unit price up 3.4%',   source:'Mint',             time:'3 days ago',   alert:{type:'up',val:'+3.4%'},  summary:'The worldwide technology sector surge, driven by continued excitement about artificial intelligence, has significantly boosted ICICI Prudential Technology Fund. The fund\'s mix of Indian IT giants like Infosys and TCS alongside international tech exposure through its overseas allocation has proven to be a strong combination.' },
-];
 
 // ── INIT ──
 function init() {
@@ -742,6 +730,29 @@ function setLastUpdated() {
   const t = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
   document.getElementById('last-updated-text').textContent =
     `Last updated today at ${t} · Unit prices from AMFI`;
+}
+
+function relativeTime(pubDate) {
+  if (!pubDate) return 'Recently';
+  const diff = Date.now() - new Date(pubDate).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h < 1) return 'Just now';
+  if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'Yesterday';
+  return `${d} days ago`;
+}
+
+async function loadNewsFromSupabase() {
+  try {
+    const { data, error } = await window._supabase
+      .from('news')
+      .select('article_id, title, description, source_name, url, published_at, fund_tags')
+      .order('published_at', { ascending: false })
+      .limit(50);
+    if (error) { console.error('fetchNews:', error); return []; }
+    return data || [];
+  } catch (e) { console.error('fetchNews:', e); return []; }
 }
 
 // ── FUND SEARCH ──
@@ -963,19 +974,20 @@ function buildFeedFilters() {
   document.getElementById('all-news-banner').style.display = skipped ? 'flex' : 'none';
 }
 
-function loadFeed() {
+async function loadFeed() {
   document.getElementById('shimmer-list').style.display = 'flex';
   document.getElementById('news-list').style.display    = 'none';
-  setTimeout(() => {
-    document.getElementById('shimmer-list').style.display = 'none';
-    document.getElementById('news-list').style.display    = 'flex';
-    renderNews('all');
-    // play swipe tutorial only once
-    if (!localStorage.getItem('fp_swipe_tutored')) {
-      localStorage.setItem('fp_swipe_tutored', '1');
-      setTimeout(playSwipeTutorial, 800);
-    }
-  }, 1100);
+
+  liveNews = await loadNewsFromSupabase();
+
+  document.getElementById('shimmer-list').style.display = 'none';
+  document.getElementById('news-list').style.display    = 'flex';
+  renderNews(activeFilter);
+
+  if (!localStorage.getItem('fp_swipe_tutored') && liveNews.length) {
+    localStorage.setItem('fp_swipe_tutored', '1');
+    setTimeout(playSwipeTutorial, 800);
+  }
 }
 
 function askRemoveFundFromFeed(event, id) {
@@ -1033,12 +1045,13 @@ function filterFeed(filterId, el) {
 }
 
 function renderNews(filterId) {
-  let articles = [...NEWS];
+  let articles = [...liveNews];
+
   if (filterId !== 'all') {
-    articles = articles.filter(n => n.fund === filterId);
+    articles = articles.filter(n => (n.fund_tags || []).includes(filterId));
   } else if (!skipped && addedFunds.length) {
-    const ids = addedFunds.map(f => f.id);
-    articles = articles.filter(n => ids.includes(n.fund));
+    const ids = new Set(addedFunds.map(f => f.id));
+    articles = articles.filter(n => (n.fund_tags || []).some(t => ids.has(t)));
   }
 
   const list = document.getElementById('news-list');
@@ -1052,40 +1065,38 @@ function renderNews(filterId) {
   }
 
   list.innerHTML = articles.map((n, i) => {
-    const fund = FUNDS.find(f => f.id === n.fund);
-    const isRead = readArticles.has(n.id);
-    const isBookmarked = bookmarkedArticles.has(n.id);
-    const alertBadge = n.alert ? `
-      <div class="news-alert-badge ${n.alert.type === 'up' ? 'positive' : ''}">
-        ${n.alert.type === 'up' ? '📈' : '📉'} Related to today's ${n.alert.val} move in unit price
-      </div>` : '';
+    const primaryTag = (n.fund_tags || [])[0];
+    const fund = FUNDS.find(f => f.id === primaryTag);
+    const tagColor = fund ? fund.color : 'tag-all';
+    const tagLabel = fund ? fund.name.split(' ').slice(0, 2).join(' ') : 'General';
+    const isRead       = readArticles.has(n.article_id);
+    const isBookmarked = bookmarkedArticles.has(n.article_id);
+    const time = relativeTime(n.published_at);
     return `
-      <div class="swipe-wrapper" id="wrap-${n.id}">
+      <div class="swipe-wrapper" id="wrap-${n.article_id}">
         <div class="swipe-action swipe-action-left"><span class="swipe-action-icon">🔖</span><span>Save</span></div>
         <div class="swipe-action swipe-action-right"><span class="swipe-action-icon">✕</span><span>Dismiss</span></div>
         <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
-          id="card-${n.id}"
-          style="animation:fadeup .4s ${i*0.06}s both;"
-          onclick="openSheet(${n.id})">
+          id="card-${n.article_id}"
+          style="animation:fadeup .4s ${i * 0.06}s both;"
+          onclick="openSheet('${n.article_id}')">
           <div class="bookmark-tag">Saved</div>
           <div class="unread-dot"></div>
           <div class="news-card-top">
-            <span class="news-fund-tag ${fund ? fund.color : 'tag-all'}">${fund ? fund.name.split(' ').slice(0,2).join(' ') : 'General'}</span>
-            <span class="news-time">${n.time}</span>
+            <span class="news-fund-tag ${tagColor}">${tagLabel}</span>
+            <span class="news-time">${time}</span>
           </div>
-          <div class="news-headline">${n.headline}</div>
+          <div class="news-headline">${n.title || ''}</div>
           <div class="news-source">
-            <span>${n.source}</span>
+            <span>${n.source_name || 'News'}</span>
             <span class="news-source-dot"></span>
-            <span>${n.time}</span>
+            <span>${time}</span>
           </div>
-          ${alertBadge}
         </div>
       </div>`;
   }).join('');
 
-  // attach swipe handlers
-  articles.forEach(n => initSwipe(n.id));
+  articles.forEach(n => initSwipe(n.article_id));
 }
 
 // ── SWIPE LOGIC ──
@@ -1167,21 +1178,29 @@ function dismissArticle(id) {
 }
 
 // ── ARTICLE SHEET ──
-function openSheet(id) {
-  const article = NEWS.find(n => n.id === id);
+function openSheet(articleId) {
+  const article = liveNews.find(n => n.article_id === articleId);
   if (!article) return;
-  activeSheetArticleId = id;
-  // mark as read
-  readArticles.add(id);
-  const card = document.getElementById(`card-${id}`);
+  activeSheetArticleId = articleId;
+
+  readArticles.add(articleId);
+  const card = document.getElementById(`card-${articleId}`);
   if (card) card.classList.add('read');
 
-  const fund = FUNDS.find(f => f.id === article.fund);
+  const primaryTag = (article.fund_tags || [])[0];
+  const fund = FUNDS.find(f => f.id === primaryTag);
   document.getElementById('sheet-tag-row').innerHTML = fund
-    ? `<span class="news-fund-tag ${fund.color}">${fund.name.split(' ').slice(0,2).join(' ')}</span>` : '';
-  document.getElementById('sheet-headline').textContent = article.headline;
-  document.getElementById('sheet-meta').textContent = `${article.source} · ${article.time}`;
-  document.getElementById('sheet-summary').textContent = article.summary;
+    ? `<span class="news-fund-tag ${fund.color}">${fund.name.split(' ').slice(0, 2).join(' ')}</span>`
+    : '';
+  document.getElementById('sheet-headline').textContent = article.title || '';
+  document.getElementById('sheet-meta').textContent =
+    `${article.source_name || 'News'} · ${relativeTime(article.published_at)}`;
+  document.getElementById('sheet-summary').textContent = article.description || 'No summary available.';
+
+  const readBtn = document.getElementById('sheet-read-btn');
+  readBtn.href = article.url || '#';
+  readBtn.style.display = article.url ? '' : 'none';
+
   updateSheetBookmarkBtn();
   document.getElementById('article-sheet').classList.add('open');
   document.body.style.overflow = 'hidden';
