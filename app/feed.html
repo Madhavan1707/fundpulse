@@ -1055,9 +1055,6 @@ function renderNews(filterId) {
 
   if (filterId !== 'all') {
     articles = articles.filter(n => (n.fund_tags || []).includes(filterId));
-  } else if (!skipped && addedFunds.length) {
-    const ids = new Set(addedFunds.map(f => f.id));
-    articles = articles.filter(n => (n.fund_tags || []).some(t => ids.has(t)));
   }
 
   const list = document.getElementById('news-list');
