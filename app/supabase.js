@@ -180,22 +180,19 @@ function initProfileDrawer() {
           </div>
         </div>
         <div class="fp-drawer-items">
-          <div class="fp-drawer-item" onclick="fpDrawerPlaceholder('Profile')">
+          <div class="fp-drawer-item" onclick="window.location.href='profile.html'">
             <div class="fp-drawer-icon grey">👤</div>
             <span class="fp-drawer-label">Profile</span>
-            <span class="fp-drawer-badge">Soon</span>
             <span class="fp-drawer-chevron">›</span>
           </div>
-          <div class="fp-drawer-item" onclick="fpDrawerPlaceholder('Appearance')">
+          <div class="fp-drawer-item" onclick="window.location.href='settings.html'">
             <div class="fp-drawer-icon grey">🎨</div>
             <span class="fp-drawer-label">Appearance</span>
-            <span class="fp-drawer-badge">Soon</span>
             <span class="fp-drawer-chevron">›</span>
           </div>
-          <div class="fp-drawer-item" onclick="fpDrawerPlaceholder('Preferences')">
+          <div class="fp-drawer-item" onclick="window.location.href='settings.html'">
             <div class="fp-drawer-icon grey">⚙️</div>
             <span class="fp-drawer-label">Preferences</span>
-            <span class="fp-drawer-badge">Soon</span>
             <span class="fp-drawer-chevron">›</span>
           </div>
           <div class="fp-drawer-sep"></div>
@@ -381,6 +378,42 @@ async function fetchProfile() {
     .single();
   if (error) { console.error('fetchProfile:', error); return null; }
   return data;
+}
+
+async function fetchSettings() {
+  const user = await getUser();
+  if (!user) return null;
+  const { data, error } = await window._supabase
+    .from('profiles')
+    .select('email_alerts_on, default_drop_val, default_rise_val, whatsapp_number')
+    .eq('id', user.id)
+    .single();
+  if (error) { console.error('fetchSettings:', error); return null; }
+  return data;
+}
+
+async function saveSettings(settings) {
+  const user = await getUser();
+  if (!user) return;
+  const { error } = await window._supabase
+    .from('profiles')
+    .upsert({
+      id:               user.id,
+      email_alerts_on:  settings.email_alerts_on,
+      default_drop_val: settings.default_drop_val,
+      default_rise_val: settings.default_rise_val,
+      whatsapp_number:  settings.whatsapp_number || null,
+    }, { onConflict: 'id' });
+  if (error) console.error('saveSettings:', error);
+}
+
+async function saveProfileName(fullName) {
+  const user = await getUser();
+  if (!user) return;
+  const { error } = await window._supabase
+    .from('profiles')
+    .upsert({ id: user.id, full_name: fullName }, { onConflict: 'id' });
+  if (error) console.error('saveProfileName:', error);
 }
 
 // ── SESSION GUARD ──
