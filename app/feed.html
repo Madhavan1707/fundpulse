@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -366,8 +366,8 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 4px; font-size: .62rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
     }
-    .swipe-action-left { left: 0; background: rgba(255,180,0,.15); color: var(--yellow); border-radius: 14px 0 0 14px; }
-    .swipe-action-right { right: 0; background: rgba(255,64,96,.12); color: var(--red); border-radius: 0 14px 14px 0; }
+    .swipe-action-left { left: 0; background: rgba(255,180,0,.28); color: var(--yellow); border-radius: 14px 0 0 14px; }
+    .swipe-action-right { right: 0; background: rgba(255,64,96,.28); color: var(--red); border-radius: 0 14px 14px 0; }
     .swipe-action-icon { font-size: 1.3rem; }
 
     /* NEWS CARD */
@@ -1082,7 +1082,8 @@ function renderNews(filterId) {
         <div class="news-card ${isRead ? 'read' : ''} ${isBookmarked ? 'is-bookmarked' : ''}"
           id="card-${n.article_id}"
           style="animation:fadeup .4s ${i * 0.06}s both;"
-          onclick="openSheet(${JSON.stringify(n.article_id)})">
+          data-article-id="${esc(n.article_id)}"
+          onclick="openSheet(this.dataset.articleId)">
           <div class="bookmark-tag">Saved</div>
           <div class="unread-dot"></div>
           <div class="news-card-top">

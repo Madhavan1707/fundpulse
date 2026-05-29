@@ -185,12 +185,12 @@ function initProfileDrawer() {
             <span class="fp-drawer-label">Profile</span>
             <span class="fp-drawer-chevron">›</span>
           </div>
-          <div class="fp-drawer-item" onclick="window.location.href='settings.html'">
+          <div class="fp-drawer-item" onclick="window.location.href='settings.html#appearance'">
             <div class="fp-drawer-icon grey">🎨</div>
             <span class="fp-drawer-label">Appearance</span>
             <span class="fp-drawer-chevron">›</span>
           </div>
-          <div class="fp-drawer-item" onclick="window.location.href='settings.html'">
+          <div class="fp-drawer-item" onclick="window.location.href='settings.html#notifications'">
             <div class="fp-drawer-icon grey">⚙️</div>
             <span class="fp-drawer-label">Preferences</span>
             <span class="fp-drawer-chevron">›</span>

@@ -104,7 +104,7 @@
 
   <div class="settings-body">
 
-    <div class="settings-section">
+    <div class="settings-section" id="section-notifications">
       <span class="settings-section-label">Notifications</span>
       <div class="settings-card">
         <div class="settings-row">
@@ -166,7 +166,7 @@
       </div>
     </div>
 
-    <div class="settings-section">
+    <div class="settings-section" id="section-appearance">
       <span class="settings-section-label">Appearance</span>
       <div class="settings-card">
         <div class="settings-row settings-row-disabled">
@@ -332,6 +332,12 @@ async function boot() {
   } catch (e) {}
 
   initProfileDrawer();
+
+  const hash = location.hash.replace('#', '');
+  if (hash) {
+    const el = document.getElementById('section-' + hash);
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+  }
 
   const fresh = await fetchSettings();
   if (fresh) {

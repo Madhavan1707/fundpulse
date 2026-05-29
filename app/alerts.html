@@ -430,11 +430,15 @@ function init() {
   document.getElementById('header-avatar').textContent = userName.charAt(0).toUpperCase();
 
   // ensure every added fund has a config entry — all OFF by default
+  let savedSettings = {};
+  try { savedSettings = JSON.parse(localStorage.getItem('fp_settings')) || {}; } catch (e) {}
+  const defDrop = String(savedSettings.default_drop_val ?? 3);
+  const defRise = String(savedSettings.default_rise_val ?? 2);
   addedFunds.forEach(f => {
     if (!alertConfig[f.id]) {
       alertConfig[f.id] = {
-        drop:    { on: false, val: '3'  },
-        rise:    { on: false, val: '2'  },
+        drop:    { on: false, val: defDrop },
+        rise:    { on: false, val: defRise },
         manager: { on: false },
         channels: ['email'],
       };

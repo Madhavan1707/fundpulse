@@ -149,6 +149,7 @@
         amc:        parseAMC(f.schemeName),
         cat:        '',
         schemeCode: f.schemeCode,
+        variant:    f.schemeName.split(' - ').slice(1).join(' · ').trim(),
       }));
   }
 

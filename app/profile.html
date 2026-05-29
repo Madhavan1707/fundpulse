@@ -86,9 +86,12 @@
     <div class="settings-section">
       <span class="settings-section-label">Your info</span>
       <div class="settings-card">
-        <div class="field-row">
-          <label class="field-label" for="name-input">Display name</label>
-          <input type="text" class="field-input" id="name-input" placeholder="Your name" onblur="saveName()">
+        <div class="field-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="flex:1;min-width:0;">
+            <label class="field-label" for="name-input">Display name</label>
+            <input type="text" class="field-input field-readonly" id="name-input" placeholder="Your name" readonly tabindex="-1">
+          </div>
+          <button id="name-edit-btn" onclick="startEditName()" style="flex-shrink:0;background:transparent;border:1px solid var(--cb);border-radius:8px;color:var(--blue);font-family:'Plus Jakarta Sans',sans-serif;font-size:.75rem;font-weight:600;padding:5px 12px;cursor:pointer;">Edit</button>
         </div>
         <div class="settings-sep"></div>
         <div class="field-row">
@@ -142,9 +145,27 @@ function showToast(msg, duration) {
   setTimeout(() => t.classList.remove('show'), duration || 1500);
 }
 
+function startEditName() {
+  const inp = document.getElementById('name-input');
+  const btn = document.getElementById('name-edit-btn');
+  inp.removeAttribute('readonly');
+  inp.removeAttribute('tabindex');
+  inp.classList.remove('field-readonly');
+  inp.focus();
+  btn.textContent = 'Save';
+  btn.onclick = saveName;
+}
+
 async function saveName() {
-  const name = document.getElementById('name-input').value.trim();
-  if (!name) return;
+  const inp  = document.getElementById('name-input');
+  const btn  = document.getElementById('name-edit-btn');
+  const name = inp.value.trim();
+  if (!name) { inp.focus(); return; }
+  inp.setAttribute('readonly', '');
+  inp.setAttribute('tabindex', '-1');
+  inp.classList.add('field-readonly');
+  btn.textContent = 'Edit';
+  btn.onclick = startEditName;
   localStorage.setItem('fp_username', name);
   document.getElementById('profile-avatar').textContent = name.charAt(0).toUpperCase();
   document.getElementById('header-avatar').textContent  = name.charAt(0).toUpperCase();
@@ -180,16 +201,12 @@ async function boot() {
 
   initProfileDrawer();
 
-  // Sync name from Supabase in background
-  const user = await getUser();
-  if (user) {
-    const sbName = user.user_metadata?.full_name;
-    if (sbName && sbName !== name) {
-      localStorage.setItem('fp_username', sbName);
-      document.getElementById('name-input').value   = sbName;
-      document.getElementById('profile-avatar').textContent = sbName.charAt(0).toUpperCase();
-      document.getElementById('header-avatar').textContent  = sbName.charAt(0).toUpperCase();
-    }
+  const profile = await fetchProfile();
+  if (profile?.full_name && profile.full_name !== name) {
+    localStorage.setItem('fp_username', profile.full_name);
+    document.getElementById('name-input').value   = profile.full_name;
+    document.getElementById('profile-avatar').textContent = profile.full_name.charAt(0).toUpperCase();
+    document.getElementById('header-avatar').textContent  = profile.full_name.charAt(0).toUpperCase();
   }
 }
 

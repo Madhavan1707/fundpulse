@@ -627,9 +627,10 @@ function wireSearch() {
     if (!matches.length) {
       res.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>';
     } else {
-      res.innerHTML = matches.map(function (f) {
+      const hint = '<div style="padding:6px 12px 2px;font-size:.65rem;color:var(--muted);line-height:1.4;">Multiple results for the same fund differ by plan. <strong style="color:var(--white)">Direct Plan · Growth</strong> is recommended for most investors.</div>';
+      res.innerHTML = hint + matches.map(function (f) {
         const already = funds.find(function (a) { return a.id === f.id; });
-        const meta = f.cat ? f.cat + ' · ' + f.amc : f.amc;
+        const meta = (f.variant ? f.variant + ' · ' : '') + (f.cat ? f.cat + ' · ' : '') + f.amc;
         return '<div class="search-result-item ' + (already ? 'is-added' : '') + '"' +
           (already ? '' : ' onclick="addFund(\'' + f.id + '\')"') + '>' +
           '<div>' +
