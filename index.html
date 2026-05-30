@@ -955,10 +955,10 @@ function ha(type){
         }
         return;
       }
-      // Supabase returns success but with null user OR empty identities when email confirmation
-      // is ON and the email already belongs to a confirmed account
-      const emptyIdentities = Array.isArray(data.user?.identities) && data.user.identities.length === 0;
-      if (!data.user || emptyIdentities) {
+      // Supabase returns identities:[] for existing confirmed accounts (anti-enumeration).
+      // data.user can also be null for NEW signups in newer GoTrue versions — do NOT treat
+      // null user alone as "user exists"; the verification email was still sent.
+      if (Array.isArray(data.user?.identities) && data.user.identities.length === 0) {
         b.textContent = 'Create Free Account'; b.style.opacity = '1';
         showExistingUserError(emailInput);
         return;
