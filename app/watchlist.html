@@ -252,6 +252,41 @@
     }
     .fc-alerts-btn:hover { background: var(--blue); color: #fff; }
 
+    /* ── FUND CARD EXPAND ── */
+    .fc-card-header { cursor: pointer; }
+    .fc-chevron {
+      flex-shrink: 0; color: var(--muted-2); font-size: .85rem;
+      transition: transform .3s cubic-bezier(.4,0,.2,1);
+      display: flex; align-items: center; justify-content: center;
+      width: 18px; line-height: 1; user-select: none;
+    }
+    .fc-chevron.open { transform: rotate(90deg); color: var(--blue-light); }
+    .fc-detail {
+      max-height: 0; overflow: hidden;
+      transition: max-height .35s ease, opacity .25s;
+      opacity: 0;
+    }
+    .fc-detail.open {
+      max-height: 180px; opacity: 1;
+      border-top: 1px solid rgba(255,255,255,.05);
+      margin-top: 12px; padding-top: 12px;
+    }
+    .fc-stats-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px;
+    }
+    .fc-stat-label {
+      font-size: .6rem; color: var(--muted-2);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px;
+    }
+    .fc-stat-val {
+      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: .88rem;
+    }
+    .fc-stat-val.up   { color: var(--green); }
+    .fc-stat-val.down { color: var(--red); }
+    .fc-nav-date {
+      font-size: .6rem; color: var(--muted-2); margin-top: 10px; text-align: right;
+    }
+
     /* ── SUMMARY BAR ── */
     .summary-bar {
       display: flex; gap: 0; margin: 0 16px 14px;
@@ -470,6 +505,36 @@ function init() {
   render();
 }
 
+// ── FUND DETAIL HELPERS ──
+function buildDetailHTML(price) {
+  if (price.price === '—') {
+    return '<div style="font-size:.76rem;color:var(--muted);padding:4px 0;">Unit price data loading…</div>';
+  }
+  const stat = (label, val, cls) =>
+    `<div><div class="fc-stat-label">${label}</div><div class="fc-stat-val ${cls || ''}">${val}</div></div>`;
+  const pctStat = (label, raw) => {
+    if (raw === undefined) return stat(label, '—', '');
+    const v = parseFloat(raw);
+    return stat(label, (v >= 0 ? '+' : '') + raw + '%', v >= 0 ? 'up' : 'down');
+  };
+  const rows = [
+    pctStat('1-week change', price.ret1w),
+    pctStat('1-month change', price.ret1m),
+    stat('52-week high', price.high52w || '—', ''),
+    stat('52-week low',  price.low52w  || '—', ''),
+  ].join('');
+  const date = price.navDate ? `<div class="fc-nav-date">Unit price as of ${price.navDate}</div>` : '';
+  return `<div class="fc-stats-grid">${rows}</div>${date}`;
+}
+
+function toggleDetail(fundId) {
+  const panel   = document.getElementById('detail-' + fundId);
+  const chevron = document.getElementById('chevron-' + fundId);
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
+  if (chevron) chevron.classList.toggle('open', isOpen);
+}
+
 // ── RENDER ──
 function render() {
   const body = document.getElementById('wl-body');
@@ -555,26 +620,32 @@ function render() {
       : 0;
     const hasAlerts = alertCount > 0;
 
+    const detailHTML = buildDetailHTML(price);
     html += `
       <div class="fund-card ${meta.accent}" style="animation-delay:${i * 0.07}s;">
         <div class="fund-card-inner">
-          <div class="fc-top">
-            <div class="fc-icon" style="background:rgba(255,255,255,.05);border:1px solid var(--cb);">${meta.icon}</div>
-            <div class="fc-title">
-              <div class="fc-name">${f.name}</div>
-              <div class="fc-meta">${f.cat} · ${f.amc}</div>
+          <div class="fc-card-header" onclick="toggleDetail('${f.id}')">
+            <div class="fc-top">
+              <div class="fc-icon" style="background:rgba(255,255,255,.05);border:1px solid var(--cb);">${meta.icon}</div>
+              <div class="fc-title">
+                <div class="fc-name">${f.name}</div>
+                <div class="fc-meta">${f.cat} · ${f.amc}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+                <button class="fc-remove" onclick="event.stopPropagation();askRemove('${f.id}')" title="Remove fund">✕</button>
+                <span class="fc-chevron" id="chevron-${f.id}">›</span>
+              </div>
             </div>
-            <button class="fc-remove" onclick="askRemove('${f.id}')" title="Remove fund">✕</button>
-          </div>
 
-          <div class="fc-price-row">
-            <div class="fc-price-group">
-              <div class="fc-price-label">Unit price today</div>
-              <div class="fc-price">${price.price}</div>
-            </div>
-            <div class="fc-change ${price.dir}">
-              ${price.change !== '—' ? `<span class="fc-change-arrow">${price.dir === 'up' ? '▲' : '▼'}</span>` : ''}
-              ${price.change}
+            <div class="fc-price-row">
+              <div class="fc-price-group">
+                <div class="fc-price-label">Unit price today</div>
+                <div class="fc-price">${price.price}</div>
+              </div>
+              <div class="fc-change ${price.dir}">
+                ${price.change !== '—' ? `<span class="fc-change-arrow">${price.dir === 'up' ? '▲' : '▼'}</span>` : ''}
+                ${price.change}
+              </div>
             </div>
           </div>
 
@@ -587,6 +658,8 @@ function render() {
               🔔 Manage alerts ›
             </button>
           </div>
+
+          <div class="fc-detail" id="detail-${f.id}">${detailHTML}</div>
         </div>
       </div>`;
   });

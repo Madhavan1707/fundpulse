@@ -780,7 +780,7 @@ function showVerifyScreen(email, name) {
         <b style="color:var(--white);">${email}</b><br/><br/>
         Click the link in the email, then reload this page to sign in.
       </p>
-      <button onclick="window.location.reload()" style="display:block;margin:0 auto 20px;padding:9px 22px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">Reload page</button>
+      <button onclick="window.location.href = window.location.pathname + '?showlogin=1'" style="display:block;margin:0 auto 20px;padding:9px 22px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;">I've confirmed — Log in</button>
       <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
         <span style="font-size:.72rem;color:var(--muted-2);">
           Wrong email? <span style="color:var(--blue-light);cursor:pointer;font-weight:500;" onclick="editEmail()">Edit &amp; resend</span>
@@ -848,9 +848,14 @@ loadSupabase(async (sb) => {
     window.location.href = 'verified.html';
     return;
   }
-  // if already logged in — go straight to feed
   const { data } = await sb.auth.getSession();
-  if (data?.session) { window.location.href = 'app/feed.html'; }
+  if (data?.session) { window.location.href = 'app/feed.html'; return; }
+  // Coming back after email confirmation — open login modal directly
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('showlogin') === '1') {
+    history.replaceState({}, '', window.location.pathname);
+    openModal('login');
+  }
 });
 function showFieldError(input, msg) {
   input.style.borderColor = 'var(--red)';

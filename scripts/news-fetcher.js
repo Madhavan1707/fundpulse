@@ -97,19 +97,46 @@ async function deleteOldArticles() {
   if (!res.ok) console.warn(`cleanup skipped: ${res.status}`);
 }
 
+function buildAMCQueries(funds) {
+  const seen = new Set();
+  const queries = [];
+  const GENERIC = new Set(['mutual fund', 'mf']);
+  funds.forEach(f => {
+    // Clean AMC name: drop "Mutual Fund" / "MF" suffix
+    const amcClean = (f.fund_amc || '').replace(/\s*(mutual\s*fund|mf)\b/gi, '').trim();
+    if (amcClean && !seen.has(amcClean.toLowerCase())) {
+      seen.add(amcClean.toLowerCase());
+      if (!GENERIC.has(amcClean.toLowerCase())) queries.push(amcClean);
+    }
+    // Also add distinctive fund name words (catches "Parag Parikh" from PPFAS funds)
+    const SKIP = new Set(['fund', 'direct', 'flexi', 'small', 'large', 'bluechip', 'midcap', 'index', 'plan', 'growth', 'nifty', 'cap']);
+    const nameKey = (f.fund_name || '').split(' ')
+      .filter(w => w.length > 3 && !SKIP.has(w.toLowerCase()))
+      .slice(0, 2).join(' ');
+    if (nameKey && !seen.has(nameKey.toLowerCase())) {
+      seen.add(nameKey.toLowerCase());
+      queries.push(nameKey);
+    }
+  });
+  return queries;
+}
+
 async function main() {
   console.log('=== FundPulse News Fetcher ===');
 
   const funds = await fetchUniqueFunds();
   console.log(`${funds.length} unique funds loaded`);
 
-  const [mfRaw, etfRaw] = await Promise.all([
-    fetchNewsArticles('mutual fund'),
-    fetchNewsArticles('ETF india'),
-  ]);
+  const amcQueries = buildAMCQueries(funds);
+  console.log(`AMC queries: ${amcQueries.join(', ')}`);
+
+  const allResults = await Promise.all(
+    ['mutual fund', 'ETF india', ...amcQueries].map(q => fetchNewsArticles(q).catch(() => []))
+  );
+  const allRaw = allResults.flat();
 
   const seen = new Set();
-  const deduped = [...mfRaw, ...etfRaw].filter(a => {
+  const deduped = allRaw.filter(a => {
     if (!a.article_id || seen.has(a.article_id)) return false;
     seen.add(a.article_id);
     return true;

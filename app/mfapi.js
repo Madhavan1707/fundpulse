@@ -50,16 +50,29 @@
         const data = json.data; // [{ nav, date }, ...] newest first
         if (!data || data.length < 2) return;
 
-        const today   = parseFloat(data[0].nav);
-        const prev    = parseFloat(data[1].nav);
-        const pct     = ((today - prev) / prev) * 100;
-        const dir     = pct >= 0 ? 'up' : 'down';
+        const today = parseFloat(data[0].nav);
+        const prev  = parseFloat(data[1].nav);
+        const pct   = ((today - prev) / prev) * 100;
         const nav = {
-          price:  '₹' + today.toFixed(2),
-          change: (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%',
-          dir:    dir,
-          day:    todayIST(),
+          price:   '₹' + today.toFixed(2),
+          change:  (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%',
+          dir:     pct >= 0 ? 'up' : 'down',
+          day:     todayIST(),
+          navDate: data[0].date,
         };
+        if (data.length > 5) {
+          const w = parseFloat(data[5].nav);
+          if (!isNaN(w) && w > 0) nav.ret1w = ((today - w) / w * 100).toFixed(2);
+        }
+        if (data.length > 21) {
+          const m = parseFloat(data[21].nav);
+          if (!isNaN(m) && m > 0) nav.ret1m = ((today - m) / m * 100).toFixed(2);
+        }
+        const yearVals = data.slice(0, Math.min(data.length, 252)).map(d => parseFloat(d.nav)).filter(v => !isNaN(v));
+        if (yearVals.length > 0) {
+          nav.high52w = '₹' + Math.max(...yearVals).toFixed(2);
+          nav.low52w  = '₹' + Math.min(...yearVals).toFixed(2);
+        }
         result[f.id] = nav;
         try { localStorage.setItem(cacheKey, JSON.stringify(nav)); } catch (e) {}
       } catch (e) {}
