@@ -144,7 +144,7 @@ async function showPhoneStep(sb, session, phone) {
   const wrap = document.createElement('div');
   wrap.className = 'otp-wrap';
   wrap.innerHTML = `
-    <input class="otp-input" id="otp-code" type="number" placeholder="——————" autocomplete="one-time-code"/>
+    <input class="otp-input" id="otp-code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="——————" autocomplete="one-time-code"/>
     <button class="otp-btn" id="otp-btn" onclick="verifyOTP()">Verify phone</button>
     <div class="otp-error" id="otp-error"></div>
     <div class="otp-resend" id="otp-resend" style="display:none;">
@@ -182,34 +182,40 @@ async function verifyOTP() {
   errEl.textContent = '';
   input.classList.remove('error');
 
-  const { error } = await window._sb.auth.verifyOtp({
-    phone: window._pendingPhone,
-    token: code,
-    type: 'phone_change',
-  });
+  try {
+    const { error } = await window._sb.auth.verifyOtp({
+      phone: window._pendingPhone,
+      token: code,
+      type: 'phone_change',
+    });
 
-  if (error) {
+    if (error) {
+      btn.disabled = false;
+      btn.textContent = 'Verify phone';
+      input.classList.add('error');
+      errEl.textContent = 'That code is incorrect or has expired. Try again or resend.';
+      return;
+    }
+
+    await window._sb.from('profiles').upsert({
+      id: window._session.user.id,
+      whatsapp_number: window._pendingPhone,
+    }, { onConflict: 'id' });
+
+    localStorage.removeItem('fp_pending_phone');
+
+    document.querySelector('.check-icon').textContent = '✓';
+    document.querySelector('h1').innerHTML = 'Phone <span>verified!</span>';
+    document.getElementById('msg').textContent = 'Taking you to FundPulse…';
+    const otpWrap = document.querySelector('.otp-wrap');
+    if (otpWrap) otpWrap.remove();
+
+    setTimeout(() => { window.location.href = 'app/feed.html'; }, 1200);
+  } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Verify phone';
-    input.classList.add('error');
-    errEl.textContent = 'That code is incorrect or has expired. Try again or resend.';
-    return;
+    errEl.textContent = 'Network error. Please try again.';
   }
-
-  await window._sb.from('profiles').upsert({
-    id: window._session.user.id,
-    whatsapp_number: window._pendingPhone,
-  }, { onConflict: 'id' });
-
-  localStorage.removeItem('fp_pending_phone');
-
-  document.querySelector('.check-icon').textContent = '✓';
-  document.querySelector('h1').innerHTML = 'Phone <span>verified!</span>';
-  document.getElementById('msg').textContent = 'Taking you to FundPulse…';
-  const otpWrap = document.querySelector('.otp-wrap');
-  if (otpWrap) otpWrap.remove();
-
-  setTimeout(() => { window.location.href = 'app/feed.html'; }, 1200);
 }
 
 async function resendOTP() {
@@ -219,7 +225,13 @@ async function resendOTP() {
   document.getElementById('msg').textContent =
     'Resending code to ' + maskPhone(window._pendingPhone) + '…';
 
-  await window._sb.auth.updateUser({ phone: window._pendingPhone });
+  const { error: resendErr } = await window._sb.auth.updateUser({ phone: window._pendingPhone });
+
+  if (resendErr) {
+    document.getElementById('msg').textContent = 'Failed to resend. Please wait and try again.';
+    if (resendEl) resendEl.style.display = 'block';
+    return;
+  }
 
   document.getElementById('msg').textContent =
     'New code sent to ' + maskPhone(window._pendingPhone);
