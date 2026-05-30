@@ -802,10 +802,10 @@ function showVerifyScreen(email, name) {
   const { data } = window._supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' && session) {
       if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
+      const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
       clearUserData();
       const uname = session.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', uname);
-      const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
       window.location.href = dest;
     }
   });
@@ -867,7 +867,11 @@ loadSupabase(async (sb) => {
     return;
   }
   const { data } = await sb.auth.getSession();
-  if (data?.session) { window.location.href = 'app/feed.html'; return; }
+  if (data?.session) {
+    const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
+    window.location.href = dest;
+    return;
+  }
   // Coming back after email confirmation — open login modal directly
   const params = new URLSearchParams(window.location.search);
   if (params.get('showlogin') === '1') {
@@ -984,7 +988,8 @@ function ha(type){
         b.textContent = 'Log in to FundPulse'; b.style.opacity = '1';
         showFieldError(emailInput, 'Incorrect email or password.'); return;
       }
-      // clear previous user's data before loading new user's data
+      // read pending phone before clearing data, then redirect after login
+      const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
       clearUserData();
       const name = data.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', name);
@@ -992,10 +997,7 @@ function ha(type){
       b.textContent = '✓ Welcome back!'; b.style.opacity = '1';
       b.style.background = 'var(--green)';
       b.style.boxShadow = '0 0 20px rgba(0,212,126,.45)';
-      setTimeout(() => {
-        const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
-        window.location.href = dest;
-      }, 1200);
+      setTimeout(() => { window.location.href = dest; }, 1200);
     });
   }
 }
