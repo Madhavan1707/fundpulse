@@ -752,6 +752,13 @@ function render(){
     <div class="mf"><label class="ml">Full name</label><input class="mi" type="text" placeholder="Your name"/></div>
     <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com"/></div>
     <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="Create a password"/></div>
+    <div class="mf">
+      <label class="ml">Phone number</label>
+      <div style="display:flex;gap:6px;">
+        <span style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:11px 12px;color:var(--muted);font-family:'Plus Jakarta Sans',sans-serif;font-size:.88rem;flex-shrink:0;display:flex;align-items:center;">+91</span>
+        <input class="mi" type="tel" placeholder="98765 43210" style="flex:1;min-width:0;" maxlength="11"/>
+      </div>
+    </div>
     <button class="mb" onclick="ha('signup')">Create Free Account</button>
     <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
   `;
