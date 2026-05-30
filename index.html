@@ -921,8 +921,10 @@ function ha(type){
         }
         return;
       }
-      // Supabase returns success + empty identities when email confirmation is ON and user exists
-      if (data.user?.identities?.length === 0) {
+      // Supabase returns success but with null user OR empty identities when email confirmation
+      // is ON and the email already belongs to a confirmed account
+      const emptyIdentities = Array.isArray(data.user?.identities) && data.user.identities.length === 0;
+      if (!data.user || emptyIdentities) {
         b.textContent = 'Create Free Account'; b.style.opacity = '1';
         showExistingUserError(emailInput);
         return;
