@@ -805,7 +805,8 @@ function showVerifyScreen(email, name) {
       clearUserData();
       const uname = session.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', uname);
-      window.location.href = 'app/feed.html';
+      const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
+      window.location.href = dest;
     }
   });
   authListener = data;
@@ -991,7 +992,10 @@ function ha(type){
       b.textContent = '✓ Welcome back!'; b.style.opacity = '1';
       b.style.background = 'var(--green)';
       b.style.boxShadow = '0 0 20px rgba(0,212,126,.45)';
-      setTimeout(() => { window.location.href = 'app/feed.html'; }, 1200);
+      setTimeout(() => {
+        const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
+        window.location.href = dest;
+      }, 1200);
     });
   }
 }
