@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## gstack
+Use /browse from gstack for all web browsing, never use mcp__claude-in-chrome__* tools.
+Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
+/design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy,
+/canary, /benchmark, /browse, /open-gstack-browser, /qa, /qa-only, /design-review,
+/setup-browser-cookies, /setup-deploy, /setup-gbrain, /sync-gbrain, /retro, /investigate,
+/document-release, /document-generate, /codex, /cso, /autoplan, /pair-agent, /careful,
+/freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
+
+## Token Efficiency Rules
+- Never use /design-html, /ui-ux-pro-max, or /design-shotgun for simple tasks
+- For quick UI changes or bug fixes, just write code directly — no skill pipeline
+- Only use gstack skills for full production feature buil
 ## What This App Is
 
 FundPulse is a proactive alert and news feed platform for Indian Mutual Funds and ETFs. It is **not** a portfolio tracker — users enter no financial data. The core value: users add funds they care about, set movement thresholds, and get notified when something happens (email, WhatsApp, SMS).
