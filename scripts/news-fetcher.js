@@ -42,19 +42,41 @@ function formatArticle(raw, funds) {
   };
 }
 
+// These 10 funds are always tagged regardless of watchlist state.
+// When users add custom funds from live search, those get merged in from Supabase.
+const KNOWN_FUNDS = [
+  { fund_id: 'sbi-psu',     fund_name: 'SBI PSU Direct Fund',        fund_amc: 'SBI Mutual Fund'     },
+  { fund_id: 'hdfc-flexi',  fund_name: 'HDFC Flexi Cap Fund',         fund_amc: 'HDFC Mutual Fund'    },
+  { fund_id: 'pp-flexi',    fund_name: 'Parag Parikh Flexi Cap',      fund_amc: 'PPFAS Mutual Fund'   },
+  { fund_id: 'quant-sc',    fund_name: 'Quant Small Cap Fund',        fund_amc: 'Quant Mutual Fund'   },
+  { fund_id: 'mirae-lc',    fund_name: 'Mirae Asset Large Cap',       fund_amc: 'Mirae Asset MF'      },
+  { fund_id: 'axis-bc',     fund_name: 'Axis Bluechip Fund',          fund_amc: 'Axis Mutual Fund'    },
+  { fund_id: 'icici-tech',  fund_name: 'ICICI Pru Technology Fund',   fund_amc: 'ICICI Prudential MF' },
+  { fund_id: 'nippon-sc',   fund_name: 'Nippon India Small Cap',      fund_amc: 'Nippon India MF'     },
+  { fund_id: 'hdfc-nifty',  fund_name: 'HDFC Nifty 50 Index Fund',    fund_amc: 'HDFC Mutual Fund'    },
+  { fund_id: 'motilal-mid', fund_name: 'Motilal Oswal Midcap Fund',   fund_amc: 'Motilal Oswal MF'    },
+];
+
 async function fetchUniqueFunds() {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/watchlist?select=fund_id,fund_name,fund_amc&limit=2000`,
-    { headers: SB_HEADERS }
-  );
-  if (!res.ok) throw new Error(`watchlist fetch failed: ${res.status}`);
-  const rows = await res.json();
-  const seen = new Set();
-  return rows.filter(r => {
-    if (seen.has(r.fund_id)) return false;
-    seen.add(r.fund_id);
-    return true;
-  });
+  const seen = new Set(KNOWN_FUNDS.map(f => f.fund_id));
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/watchlist?select=fund_id,fund_name,fund_amc&limit=2000`,
+      { headers: SB_HEADERS }
+    );
+    if (!res.ok) throw new Error(`watchlist fetch failed: ${res.status}`);
+    const rows = await res.json();
+    // merge in any user-added funds not in the hardcoded list
+    const extra = rows.filter(r => {
+      if (seen.has(r.fund_id)) return false;
+      seen.add(r.fund_id);
+      return true;
+    });
+    return [...KNOWN_FUNDS, ...extra];
+  } catch (e) {
+    console.warn('watchlist fetch failed, using hardcoded list:', e.message);
+    return KNOWN_FUNDS;
+  }
 }
 
 async function fetchNewsArticles(query) {
