@@ -387,7 +387,7 @@
 <script>
 // ── STATE ──
 const userName   = localStorage.getItem('fp_username') || 'Madhavan';
-const addedFunds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
+let addedFunds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
 
 // alert config per fund: { fundId: { drop:{on,val}, rise:{on,val}, manager:{on}, channels:[] } }
 let alertConfig = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');

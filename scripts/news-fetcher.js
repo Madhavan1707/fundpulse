@@ -12,8 +12,7 @@ const SB_HEADERS = {
 
 const STOP_WORDS = new Set([
   'fund', 'funds', 'direct', 'small', 'large', 'india', 'nifty',
-  'asset', 'flexi', 'midcap', 'bluechip', 'cap', 'plan', 'growth', 'index',
-  'axis',
+  'asset', 'flexi', 'midcap', 'cap', 'plan', 'growth', 'index',
 ]);
 
 function matchFundTags(title, description, funds) {
@@ -21,10 +20,8 @@ function matchFundTags(title, description, funds) {
   return funds
     .filter(f => {
       const words = (f.fund_name || '').toLowerCase().split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w));
-      const amcWords = (f.fund_amc || '').toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2);
-      const amcMatch = amcWords.length >= 2
-        ? amcWords.every(w => text.includes(w))
-        : amcWords.length === 1 && text.includes(amcWords[0]);
+      const amcWords = (f.fund_amc || '').toLowerCase().split(' ').filter(w => w.length > 2 && w !== 'mutual');
+      const amcMatch = amcWords.length > 0 && text.includes(amcWords[0]);
       return words.some(w => text.includes(w)) || amcMatch;
     })
     .map(f => f.fund_id);
@@ -121,6 +118,29 @@ function buildAMCQueries(funds) {
   return queries;
 }
 
+async function retagExistingArticles(funds) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/news?select=article_id,title,description&limit=500`,
+    { headers: SB_HEADERS }
+  );
+  if (!res.ok) { console.warn('retag fetch failed:', res.status); return; }
+  const articles = await res.json();
+  let updated = 0;
+  await Promise.all(articles.map(async a => {
+    const tags = matchFundTags(a.title, a.description, funds);
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/news?article_id=eq.${encodeURIComponent(a.article_id)}`,
+      {
+        method: 'PATCH',
+        headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ fund_tags: tags }),
+      }
+    );
+    if (patchRes.ok) updated++;
+  }));
+  console.log(`Retagged ${updated} existing articles`);
+}
+
 async function main() {
   console.log('=== FundPulse News Fetcher ===');
 
@@ -151,6 +171,7 @@ async function main() {
   await insertNewArticles(formatted);
   console.log(`Inserted ${formatted.length} articles (existing skipped)`);
 
+  await retagExistingArticles(funds);
   await deleteOldArticles();
   console.log('Old articles cleaned up');
   console.log('=== Done ===');
