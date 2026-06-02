@@ -756,6 +756,12 @@ searchInput.addEventListener('input', async function () {
   const q = this.value.trim();
   if (!q) { searchResultsEl.classList.remove('show'); return; }
 
+  const ts = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
+  if ((Date.now() - ts) >= 86400000) {
+    searchResultsEl.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">Searching…</span></div>';
+    searchResultsEl.classList.add('show');
+  }
+
   const matches = window.searchFunds
     ? await searchFunds(q)
     : FUNDS.filter(function (f) {
