@@ -268,7 +268,8 @@
       position: sticky; top: 0; z-index: 5; flex-shrink: 0;
     }
     .feed-filters {
-      display: flex; gap: 8px; padding: 12px 16px; overflow-x: auto; flex: 1;
+      display: flex; gap: 8px; padding: 12px 16px 12px 16px; overflow-x: auto; flex: 1;
+      padding-right: 48px;
     }
     .feed-filters::-webkit-scrollbar { display: none; }
     .filter-chip {
@@ -295,16 +296,23 @@
     .filter-chip.removable:hover .fc-remove { opacity: 1; transform: scale(1); }
     .fc-remove:hover { background: var(--red) !important; color: #fff !important; }
 
-    /* add funds button in filter bar */
-    .add-funds-btn {
+    /* add funds chip — lives inside the scroll list */
+    .add-funds-chip {
       display: flex; align-items: center; gap: 5px;
-      padding: 6px 12px; margin-right: 12px; flex-shrink: 0;
+      padding: 6px 12px; flex-shrink: 0;
       border: 1px dashed rgba(35,96,245,.4); border-radius: 100px;
       background: var(--blue-dim); color: var(--blue-light);
       font-size: .72rem; font-weight: 600; cursor: pointer;
       transition: all .22s; white-space: nowrap;
     }
-    .add-funds-btn:hover { background: var(--blue); color: #fff; border-style: solid; }
+    .add-funds-chip:hover { background: var(--blue); color: #fff; border-style: solid; }
+
+    /* gradient fade on right edge — hints at horizontal scroll */
+    .filter-grad {
+      position: absolute; right: 0; top: 0; bottom: 0; width: 44px;
+      background: linear-gradient(to right, transparent, rgba(7,12,24,.95));
+      pointer-events: none; z-index: 2;
+    }
 
     /* last updated bar */
     .last-updated-bar {
@@ -561,14 +569,12 @@
     <div class="header-avatar" id="feed-avatar" onclick="openProfileDrawer()">M</div>
   </div>
 
-  <!-- filter bar + add funds button -->
+  <!-- filter bar -->
   <div class="feed-filter-bar">
     <div class="feed-filters" id="feed-filters">
       <div class="filter-chip active" data-filter="all" onclick="filterFeed('all',this)">All</div>
     </div>
-    <button class="add-funds-btn" onclick="showOnboard()" title="Add more funds">
-      <span>＋</span> Add funds
-    </button>
+    <div class="filter-grad"></div>
   </div>
 
   <!-- last updated -->
@@ -956,6 +962,7 @@ function buildFeedFilters() {
         <span class="fc-remove" onclick="askRemoveFundFromFeed(event,'${f.id}')" title="Remove fund">✕</span>
       </div>`;
   });
+  filtersEl.innerHTML += `<button class="add-funds-chip" onclick="showOnboard()">＋ Add</button>`;
   document.getElementById('all-news-banner').style.display = skipped ? 'flex' : 'none';
 }
 
