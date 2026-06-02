@@ -695,13 +695,6 @@ function wireSearch() {
     const q = this.value.trim();
     if (!q) { res.classList.remove('show'); return; }
 
-    const ts = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
-    const cacheWarm = (Date.now() - ts) < 86400000;
-    if (!cacheWarm) {
-      res.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">Searching…</span></div>';
-      res.classList.add('show');
-    }
-
     const matches = window.searchFunds
       ? await searchFunds(q)
       : ALL_FUNDS.filter(function (f) {

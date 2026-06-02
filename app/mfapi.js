@@ -147,6 +147,18 @@
   async function searchFunds(query) {
     const q = query.toLowerCase().trim();
     if (!q) return [];
+
+    const ts = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
+    const cacheWarm = (Date.now() - ts) < 86400000;
+
+    if (!cacheWarm) {
+      // Full list not cached yet — return hardcoded funds instantly, no waiting
+      getFundList(); // warm cache in background for next session
+      return FALLBACK_FUNDS
+        .filter(f => f.name.toLowerCase().includes(q) || f.amc.toLowerCase().includes(q))
+        .slice(0, 7);
+    }
+
     const list = await getFundList();
     if (!list) {
       return FALLBACK_FUNDS
