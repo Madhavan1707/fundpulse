@@ -19,10 +19,14 @@ function matchFundTags(title, description, funds) {
   const text = ((title || '') + ' ' + (description || '')).toLowerCase();
   return funds
     .filter(f => {
+      // Name match: every distinctive word must appear — a lone "axis" must not
+      // tag Axis Bluechip Fund from an Axis Bank story.
       const words = (f.fund_name || '').toLowerCase().split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w));
-      const amcWords = (f.fund_amc || '').toLowerCase().split(' ').filter(w => w.length > 2 && w !== 'mutual');
-      const amcMatch = amcWords.length > 0 && text.includes(amcWords[0]);
-      return words.some(w => text.includes(w)) || amcMatch;
+      const nameMatch = words.length > 0 && words.every(w => text.includes(w));
+      // AMC match: first two significant words must both appear ("axis" + "mutual").
+      const amcWords = (f.fund_amc || '').toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2);
+      const amcMatch = amcWords.length > 0 && amcWords.every(w => text.includes(w));
+      return nameMatch || amcMatch;
     })
     .map(f => f.fund_id);
 }
@@ -165,6 +169,11 @@ async function retagExistingArticles(funds) {
 
 async function main() {
   console.log('=== FundPulse News Fetcher ===');
+
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY || !NEWSDATA_API_KEY) {
+    console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEWSDATA_API_KEY');
+    process.exit(1);
+  }
 
   const funds = await fetchUniqueFunds();
   console.log(`${funds.length} unique funds loaded`);
