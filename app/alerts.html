@@ -4,11 +4,16 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="color-scheme" content="dark"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
+  <meta name="theme-color" content="#070c18"/>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg"/>
   <title>FundPulse — Alerts</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
   <script src="supabase.js"></script>
+  <script src="mfapi.js"></script>
   <style>
     @view-transition { navigation: auto; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -220,6 +225,9 @@
 
     /* % input + quick pick */
     .ar-input-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    /* data-driven threshold hint under the input row */
+    .ar-hint { font-size: .68rem; color: var(--muted-2); line-height: 1.55; margin-top: 7px; }
+    .ar-hint b { color: var(--muted); font-weight: 600; }
     .pct-input-wrap {
       display: flex; align-items: center; gap: 4px;
       background: var(--navy-4); border: 1px solid var(--cb);
@@ -413,6 +421,48 @@ const FUND_COLORS = {
   'hdfc-nifty': { bg:'rgba(35,96,245,.1)',   icon:'📉' },
   'motilal-mid':{ bg:'rgba(0,212,126,.1)',   icon:'🎯' },
 };
+
+// ── THRESHOLD HINTS ──
+// Recent daily unit-price moves per fund (via mfapi.js) turn "what number
+// do I pick?" into "this fund typically moves ±X% a day".
+let fundMoves = {}; // fund_id → daily % moves, newest first
+
+function hintText(fundId, kind) {
+  const moves = fundMoves[fundId];
+  const cfg = alertConfig[fundId];
+  if (!moves || !moves.length || !cfg || !cfg[kind]) return '';
+  const val = parseFloat(cfg[kind].val);
+  const typical = window.typicalDailyMove ? typicalDailyMove(moves) : null;
+  if (typical === null || isNaN(val) || val <= 0) return '';
+  const est = estAlertsPerMonth(moves, val, kind);
+  let freq;
+  if (est >= 15)      freq = 'almost every day';
+  else if (est >= 6)  freq = 'a few times a week';
+  else if (est >= 0.7) freq = 'about ' + Math.max(1, Math.round(est)) + '× a month';
+  else if (est > 0)   freq = 'less than once a month';
+  else                freq = 'rarely — nothing in the last 3 months went that far';
+  const word = kind === 'drop' ? 'drop' : 'rise';
+  return `This fund typically moves <b>±${typical.toFixed(1)}% a day</b>. A ${val}% ${word} alert would reach you <b>${freq}</b>.`;
+}
+
+function updateHint(fundId, kind) {
+  const el = document.getElementById(`hint-${fundId}-${kind}`);
+  if (el) el.innerHTML = hintText(fundId, kind);
+}
+
+function updateAllHints() {
+  addedFunds.forEach(f => { updateHint(f.id, 'drop'); updateHint(f.id, 'rise'); });
+}
+
+function loadMoves() {
+  if (!window.fetchNAVs || !addedFunds.length) return;
+  fetchNAVs(addedFunds).then(navs => {
+    Object.keys(navs).forEach(id => {
+      if (navs[id] && navs[id].dailyMoves) fundMoves[id] = navs[id].dailyMoves;
+    });
+    updateAllHints();
+  }).catch(() => {});
+}
 
 // ── REAL ALERT HISTORY (from alert_log via supabase.js) ──
 let alertHistory = [];   // rows: { fund_id, fund_name, alert_type, pct_change, channel, sent_at }
@@ -621,6 +671,7 @@ function fundCardHTML(fund, idx) {
                     onclick="quickPick('${fund.id}','drop',${v})">${v}%</button>`).join('')}
                 </div>
               </div>
+              <div class="ar-hint" id="hint-${fund.id}-drop">${hintText(fund.id,'drop')}</div>
             </div>
             <div class="ar-toggle-wrap">
               <label class="toggle">
@@ -649,6 +700,7 @@ function fundCardHTML(fund, idx) {
                     onclick="quickPick('${fund.id}','rise',${v})">${v}%</button>`).join('')}
                 </div>
               </div>
+              <div class="ar-hint" id="hint-${fund.id}-rise">${hintText(fund.id,'rise')}</div>
             </div>
             <div class="ar-toggle-wrap">
               <label class="toggle">
@@ -726,6 +778,7 @@ function updateVal(fundId, type, val) {
   const label = document.querySelector(`#fac-${fundId} .ar-icon.${type}`)
     ?.closest('.alert-rule')?.querySelector('.ar-label span');
   if (label) label.textContent = clean + '%';
+  updateHint(fundId, type);
 }
 
 function syncQuickPick(fundId, type, val) {
@@ -824,6 +877,7 @@ if (expandOnLoad) {
 // here never shows an empty shell while the auth SDK loads
 init();
 initProfileDrawer();
+loadMoves(); // threshold hints from live unit-price history (cached daily)
 
 async function boot() {
   const session = await getSession();
@@ -838,6 +892,7 @@ async function boot() {
     localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
     applyDefaultConfigs();
     render(); // fund set may have changed even if alert config didn't
+    loadMoves();
   }
   const sbConfig = await fetchAlertConfig();
   if (Object.keys(sbConfig).length) {

@@ -51,7 +51,8 @@
         // Once we have TODAY'S published NAV it can't change — cache all day.
         // A carry-over NAV (yesterday's, cached before the ~9:30 PM publish)
         // only lives 1 hour, so the evening update actually shows up.
-        if (cached && cached.day === todayIST()) {
+        // Entries without .spark predate sparklines/threshold hints — refetch.
+        if (cached && cached.spark && cached.day === todayIST()) {
           const isTodaysNav = cached.navDate === todayISTNavDate();
           const recentEnough = (Date.now() - (cached.fetchedAt || 0)) < 3600000;
           if (isTodaysNav || recentEnough) { result[f.id] = cached; return; }
@@ -89,6 +90,15 @@
           nav.high52w = '₹' + Math.max(...yearVals).toFixed(2);
           nav.low52w  = '₹' + Math.min(...yearVals).toFixed(2);
         }
+        // last ~30 sessions, oldest → newest — drawn as a sparkline
+        nav.spark = data.slice(0, 30).map(d => parseFloat(d.nav)).filter(v => !isNaN(v)).reverse();
+        // last ~60 daily % moves (newest first) — powers threshold hints
+        const moves = [];
+        for (let i = 0; i < Math.min(data.length - 1, 60); i++) {
+          const a = parseFloat(data[i].nav), b = parseFloat(data[i + 1].nav);
+          if (!isNaN(a) && !isNaN(b) && b > 0) moves.push(((a - b) / b) * 100);
+        }
+        nav.dailyMoves = moves;
         result[f.id] = nav;
         try { localStorage.setItem(cacheKey, JSON.stringify(nav)); } catch (e) {}
       } catch (e) {}
@@ -209,6 +219,27 @@
       }));
   }
 
+  // Median absolute daily move (%) — "this fund typically moves ±X% a day"
+  function typicalDailyMove(moves) {
+    if (!moves || !moves.length) return null;
+    const abs = moves.map(Math.abs).sort(function (a, b) { return a - b; });
+    const mid = Math.floor(abs.length / 2);
+    return abs.length % 2 ? abs[mid] : (abs[mid - 1] + abs[mid]) / 2;
+  }
+
+  // Estimated alerts per month for a threshold, from recent daily moves.
+  // dir: 'drop' counts moves <= -t, 'rise' counts moves >= t, else |move| >= t.
+  // ~21 trading days per month.
+  function estAlertsPerMonth(moves, threshold, dir) {
+    const t = parseFloat(threshold);
+    if (!moves || !moves.length || !(t > 0)) return null;
+    let hits = 0;
+    moves.forEach(function (m) {
+      if (dir === 'drop' ? m <= -t : dir === 'rise' ? m >= t : Math.abs(m) >= t) hits++;
+    });
+    return (hits / moves.length) * 21;
+  }
+
   // Call on page load to warm the fund list cache silently
   function prefetchFundList() {
     getFundList().catch(function () {});
@@ -218,6 +249,8 @@
   window.fetchNAVs         = fetchNAVs;
   window.searchFunds       = searchFunds;
   window.prefetchFundList  = prefetchFundList;
+  window.typicalDailyMove  = typicalDailyMove;
+  window.estAlertsPerMonth = estAlertsPerMonth;
   window._mfapi            = true;
 
   // Fire ready after current execution context so listeners are set up first

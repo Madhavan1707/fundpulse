@@ -4,6 +4,10 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="color-scheme" content="dark"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
+  <meta name="theme-color" content="#070c18"/>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg"/>
   <title>FundPulse — News Feed</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -317,6 +321,48 @@
       pointer-events: none; z-index: 2;
     }
 
+    /* pulse card — "all quiet" / "something moved" daily status */
+    .pulse-card {
+      margin: 12px 16px 2px; border-radius: 12px; padding: 12px 14px;
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: .78rem; line-height: 1.55; color: var(--muted);
+      animation: fadeup .4s ease;
+    }
+    .pulse-card b { color: var(--white); font-weight: 600; }
+    .pulse-card.quiet { background: rgba(0,212,126,.06); border: 1px solid rgba(0,212,126,.18); }
+    .pulse-card.quiet .pc-icon { color: var(--green); }
+    .pulse-card.moved { background: rgba(255,180,0,.07); border: 1px solid rgba(255,180,0,.25); }
+    .pulse-card.moved .pc-icon { color: var(--yellow); }
+    .pc-icon { font-size: .95rem; line-height: 1.4; flex-shrink: 0; }
+    .pc-link { color: var(--blue-light); cursor: pointer; font-weight: 600; white-space: nowrap; }
+    .pc-link:hover { text-decoration: underline; }
+
+    /* starter packs — onboarding */
+    .packs-label {
+      font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted-2); margin: 4px 0 10px; display: block;
+      opacity: 0; animation: fadeup .5s .45s forwards;
+    }
+    .packs-row {
+      display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 4px;
+      opacity: 0; animation: fadeup .5s .5s forwards;
+    }
+    .packs-row::-webkit-scrollbar { display: none; }
+    .pack-card {
+      flex: 0 0 auto; min-width: 150px; max-width: 170px;
+      background: var(--navy-3); border: 1px solid var(--cb); border-radius: 12px;
+      padding: 12px 14px; cursor: pointer; transition: border-color .2s, transform .2s;
+    }
+    .pack-card:hover { border-color: rgba(35,96,245,.45); transform: translateY(-1px); }
+    .pack-emoji { font-size: 1.1rem; display: block; margin-bottom: 6px; }
+    .pack-name { font-size: .78rem; font-weight: 700; color: var(--white); margin-bottom: 3px; font-family: 'Outfit', sans-serif; }
+    .pack-desc { font-size: .66rem; color: var(--muted); line-height: 1.5; }
+    .pack-count { font-size: .62rem; color: var(--blue-light); margin-top: 6px; font-weight: 600; }
+    .packs-note {
+      font-size: .66rem; color: var(--muted-2); margin-bottom: 18px;
+      opacity: 0; animation: fadeup .5s .55s forwards;
+    }
+
     /* last updated bar */
     .last-updated-bar {
       padding: 7px 16px; font-size: .65rem; color: var(--muted-2);
@@ -543,6 +589,28 @@
       <input class="search-input" type="text" id="fund-search" placeholder="Try 'SBI PSU', 'HDFC Flexi'..." autocomplete="off"/>
       <div class="search-results" id="search-results"></div>
     </div>
+    <span class="packs-label">Or start with a popular pack</span>
+    <div class="packs-row">
+      <div class="pack-card" onclick="addPack('steady')">
+        <span class="pack-emoji">🛡️</span>
+        <div class="pack-name">Steady &amp; Simple</div>
+        <div class="pack-desc">Nifty 50 index and large, well-known funds</div>
+        <div class="pack-count">+ 3 funds</div>
+      </div>
+      <div class="pack-card" onclick="addPack('growth')">
+        <span class="pack-emoji">🚀</span>
+        <div class="pack-name">Growth Hunters</div>
+        <div class="pack-desc">Popular small &amp; mid cap funds</div>
+        <div class="pack-count">+ 3 funds</div>
+      </div>
+      <div class="pack-card" onclick="addPack('balanced')">
+        <span class="pack-emoji">⚖️</span>
+        <div class="pack-name">Balanced Mix</div>
+        <div class="pack-desc">Flexi cap funds plus an index anchor</div>
+        <div class="pack-count">+ 3 funds</div>
+      </div>
+    </div>
+    <p class="packs-note">Packs are popular starting points people track — not investment advice.</p>
     <div class="added-funds-label" id="added-label">Added to your watchlist</div>
     <div class="added-funds-list" id="added-funds-list"></div>
     <div class="onboard-actions">
@@ -592,6 +660,9 @@
       <div class="ptr-spinner"></div>
       <span>Checking for updates…</span>
     </div>
+
+    <!-- pulse card: all quiet / something moved -->
+    <div class="pulse-card" id="pulse-card" style="display:none;"></div>
 
     <!-- all-news banner -->
     <div class="all-news-banner" id="all-news-banner" style="display:none;">
@@ -879,6 +950,22 @@ function updateAddedList() {
     </div>`).join('');
 }
 
+// ── STARTER PACKS ──
+// Popular starting points from the known-funds list — labeled "not advice" in the UI
+const PACKS = {
+  steady:   ['hdfc-nifty', 'mirae-lc', 'axis-bc'],
+  growth:   ['quant-sc', 'nippon-sc', 'motilal-mid'],
+  balanced: ['pp-flexi', 'hdfc-flexi', 'hdfc-nifty'],
+};
+
+function addPack(packId) {
+  const ids = PACKS[packId] || [];
+  ids.forEach(id => addFund(id));
+  // bring the added list into view so the user sees what happened
+  const label = document.getElementById('added-label');
+  if (label) label.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 // instant remove — used ONLY on onboarding screen (no confirmation needed)
 function removeFundInstant(id) {
   const chip = document.getElementById(`chip-${id}`);
@@ -949,6 +1036,7 @@ function confirmRemove() {
   if (activeFilter === removingId) activeFilter = 'all';
   buildFeedFilters();
   renderNews(activeFilter);
+  updatePulseCard();
 }
 
 // ── NAVIGATION ──
@@ -984,6 +1072,7 @@ function goFeed() {
   showScreen('screen-feed');
   buildFeedFilters();
   loadFeed();
+  updatePulseCard();
 }
 
 function showOnboard() {
@@ -1017,12 +1106,58 @@ function buildFeedFilters() {
         <span class="fc-remove" onclick="askRemoveFundFromFeed(event,'${f.id}')" title="Remove fund">✕</span>
       </div>`;
   });
+  filtersEl.innerHTML += `<div class="filter-chip" data-filter="__saved" onclick="filterFeed('__saved',this)">🔖 Saved</div>`;
   filtersEl.innerHTML += `<button class="add-funds-chip" onclick="showOnboard()">＋ Add</button>`;
   // highlight whichever filter is actually active (falls back to All)
   const activeChip = filtersEl.querySelector(`.filter-chip[data-filter="${activeFilter}"]`)
                   || filtersEl.querySelector('.filter-chip[data-filter="all"]');
   if (activeChip) activeChip.classList.add('active');
   document.getElementById('all-news-banner').style.display = skipped ? 'flex' : 'none';
+}
+
+// ── PULSE CARD ──
+// Daily status from live unit prices vs the user's own alert levels.
+// Entirely client-side: fetchNAVs is cached, fp_alert_config is local.
+async function updatePulseCard() {
+  const el = document.getElementById('pulse-card');
+  if (!el) return;
+  if (!addedFunds.length || !window.fetchNAVs) { el.style.display = 'none'; return; }
+  try {
+    const navs = await fetchNAVs(addedFunds);
+    let cfg = {};
+    try { cfg = JSON.parse(localStorage.getItem('fp_alert_config') || '{}'); } catch (e) {}
+    const short = n => n.split(' ').slice(0, 2).join(' ');
+    const fmt = p => (p >= 0 ? '+' : '') + p.toFixed(2) + '%';
+    let biggest = null;
+    const crossed = [];
+    let anyAlertOn = false;
+    addedFunds.forEach(f => {
+      const nav = navs[f.id];
+      if (!nav || !nav.change) return;
+      const pct = parseFloat(nav.change);
+      if (isNaN(pct)) return;
+      if (!biggest || Math.abs(pct) > Math.abs(biggest.pct)) biggest = { fund: f, pct };
+      const c = cfg[f.id];
+      if (!c) return;
+      if ((c.drop && c.drop.on) || (c.rise && c.rise.on)) anyAlertOn = true;
+      if (c.drop && c.drop.on && pct <= -parseFloat(c.drop.val)) crossed.push({ fund: f, pct });
+      else if (c.rise && c.rise.on && pct >= parseFloat(c.rise.val)) crossed.push({ fund: f, pct });
+    });
+    if (!biggest) { el.style.display = 'none'; return; } // no live prices — show nothing rather than guess
+    if (crossed.length) {
+      const c = crossed[0];
+      const more = crossed.length > 1 ? ` +${crossed.length - 1} more fund${crossed.length > 2 ? 's' : ''}.` : '';
+      el.className = 'pulse-card moved';
+      el.innerHTML = `<span class="pc-icon">⚡</span><div><b>${short(c.fund.name)} moved ${fmt(c.pct)}</b> — past your alert level.${more} <span class="pc-link" onclick="window.location.href='alerts.html'">See alerts →</span></div>`;
+    } else if (anyAlertOn) {
+      el.className = 'pulse-card quiet';
+      el.innerHTML = `<span class="pc-icon">✓</span><div><b>All quiet.</b> None of your funds moved past your alert levels. Biggest move: ${short(biggest.fund.name)} ${fmt(biggest.pct)}.</div>`;
+    } else {
+      el.className = 'pulse-card quiet';
+      el.innerHTML = `<span class="pc-icon">👀</span><div>Biggest move today: <b>${short(biggest.fund.name)} ${fmt(biggest.pct)}</b>. <span class="pc-link" onclick="window.location.href='alerts.html'">Set alert levels →</span> and we'll email you when something big happens.</div>`;
+    }
+    el.style.display = 'flex';
+  } catch (e) { el.style.display = 'none'; }
 }
 
 async function loadFeed() {
@@ -1060,16 +1195,23 @@ function esc(s) {
 function renderNews(filterId) {
   let articles = [...liveNews];
 
-  if (filterId !== 'all') {
+  if (filterId === '__saved') {
+    articles = articles.filter(n => bookmarkedArticles.has(n.article_id));
+  } else if (filterId !== 'all') {
     articles = articles.filter(n => (n.fund_tags || []).includes(filterId));
   }
 
   const list = document.getElementById('news-list');
   if (!articles.length) {
+    const empty = filterId === '__saved'
+      ? { icon: '🔖', title: 'Nothing saved yet',
+          body: 'Tap the 🔖 on any story to keep it here. Saved stories clear out after 7 days with the rest of the feed.' }
+      : { icon: '📭', title: 'No recent news',
+          body: "No news found in the last 7 days for this fund. We're watching." };
     list.innerHTML = `<div style="text-align:center;padding:48px 20px;">
-      <div style="font-size:2rem;margin-bottom:12px;">📭</div>
-      <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:1rem;margin-bottom:8px;">No recent news</div>
-      <div style="font-size:.8rem;color:var(--muted);">No news found in the last 7 days for this fund. We're watching.</div>
+      <div style="font-size:2rem;margin-bottom:12px;">${empty.icon}</div>
+      <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:1rem;margin-bottom:8px;">${empty.title}</div>
+      <div style="font-size:.8rem;color:var(--muted);">${empty.body}</div>
     </div>`;
     return;
   }
@@ -1126,6 +1268,8 @@ function bookmarkArticle(id) {
   }
   saveIdSet('fp_bookmarks', bookmarkedArticles);
   if (activeSheetArticleId === id) updateSheetBookmarkBtn();
+  // on the Saved tab, un-bookmarking removes the card from the list
+  if (activeFilter === '__saved' && !bookmarkedArticles.has(id)) renderNews('__saved');
 }
 
 // ── ARTICLE SHEET ──
@@ -1217,6 +1361,7 @@ document.addEventListener('keydown', e => {
     showScreen('screen-feed');
     buildFeedFilters();
     loadFeed(); // shows shimmer; waits for the SDK internally
+    updatePulseCard();
   }
   // else: show onboarding (default screen is already active)
 })();
@@ -1257,11 +1402,14 @@ async function boot() {
         showScreen('screen-feed');
         buildFeedFilters();
         loadFeed();
+        updatePulseCard();
       } else if (newIds !== prevIds) {
         // fund set changed — refetch so tagged news for synced funds appears
-        if (!addedFunds.some(f => f.id === activeFilter)) activeFilter = 'all';
+        if (activeFilter !== 'all' && activeFilter !== '__saved' &&
+            !addedFunds.some(f => f.id === activeFilter)) activeFilter = 'all';
         buildFeedFilters();
         loadFeed();
+        updatePulseCard();
       }
     }
   }
