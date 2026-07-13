@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { resolveSchemeCode, checkThresholds } = require('./alert-engine.js');
+const { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, wantsEmail, navDateToISO } = require('./alert-engine.js');
 
 // resolveSchemeCode
 test('resolves known legacy string id', () => {
@@ -43,4 +43,50 @@ test('triggers at exact threshold boundary', () => {
   assert.deepEqual(drop, ['drop']);
   const rise = checkThresholds({ drop_on: false, drop_val: 3, rise_on: true, rise_val: 2 }, 2.0);
   assert.deepEqual(rise, ['rise']);
+});
+test('does not trigger when threshold value is null (would otherwise fire on any move)', () => {
+  const result = checkThresholds({ drop_on: true, drop_val: null, rise_on: true, rise_val: null }, -0.5);
+  assert.deepEqual(result, []);
+});
+test('does not trigger when threshold value is zero or negative', () => {
+  assert.deepEqual(checkThresholds({ drop_on: true, drop_val: 0,  rise_on: false, rise_val: 2 }, -5), []);
+  assert.deepEqual(checkThresholds({ drop_on: true, drop_val: -3, rise_on: false, rise_val: 2 }, -5), []);
+});
+test('accepts numeric strings for threshold values (frontend stores strings)', () => {
+  const result = checkThresholds({ drop_on: true, drop_val: '3', rise_on: false, rise_val: '2' }, -4.0);
+  assert.deepEqual(result, ['drop']);
+});
+
+// NAV freshness (mfapi.in dates are DD-MM-YYYY)
+test('todayISTString formats as DD-MM-YYYY in IST', () => {
+  // 2026-07-13T10:00:00Z is 3:30 PM IST on 13 July
+  assert.equal(todayISTString(new Date('2026-07-13T10:00:00Z')), '13-07-2026');
+});
+test('todayISTString rolls to next day after 6:30 PM UTC', () => {
+  // 2026-07-13T19:00:00Z is 12:30 AM IST on 14 July
+  assert.equal(todayISTString(new Date('2026-07-13T19:00:00Z')), '14-07-2026');
+});
+test('isNavFresh accepts today and rejects a stale (Friday) NAV', () => {
+  const now = new Date('2026-07-13T16:30:00Z');
+  assert.equal(isNavFresh('13-07-2026', now), true);
+  assert.equal(isNavFresh('10-07-2026', now), false);
+});
+
+// nav date conversion for alert_log
+test('navDateToISO converts mfapi DD-MM-YYYY to YYYY-MM-DD', () => {
+  assert.equal(navDateToISO('10-07-2026'), '2026-07-10');
+  assert.equal(navDateToISO('01-01-2027'), '2027-01-01');
+});
+
+// channel gating
+test('wantsEmail true when email is among channels', () => {
+  assert.equal(wantsEmail({ channels: ['email', 'whatsapp'] }), true);
+});
+test('wantsEmail false when user chose only non-email channels', () => {
+  assert.equal(wantsEmail({ channels: ['whatsapp'] }), false);
+});
+test('wantsEmail defaults to true when channels missing or empty', () => {
+  assert.equal(wantsEmail({}), true);
+  assert.equal(wantsEmail({ channels: [] }), true);
+  assert.equal(wantsEmail({ channels: null }), true);
 });

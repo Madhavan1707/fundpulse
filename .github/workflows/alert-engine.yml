@@ -2,7 +2,7 @@ name: Alert Engine
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # 9:30 PM IST daily (after AMFI publishes NAVs)
+    - cron: '30 16 * * *'  # 10:00 PM IST daily (after AMFI publishes NAVs; engine skips if today's NAV isn't out yet)
   workflow_dispatch:        # manual trigger for testing
 
 jobs:
