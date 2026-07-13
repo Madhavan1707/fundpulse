@@ -330,6 +330,21 @@ async function doDeleteAccount() {
   btn.textContent = 'Deleting…';
   btn.style.opacity = '.65';
   btn.style.pointerEvents = 'none';
+
+  // Preferred path: edge function deletes data AND the login itself
+  try {
+    const { error } = await window._supabase.functions.invoke('delete-account');
+    if (!error) {
+      localStorage.clear();
+      window.location.href = '../index.html';
+      return;
+    }
+    console.warn('delete-account function failed, falling back to data wipe:', error.message || error);
+  } catch (e) {
+    console.warn('delete-account function unavailable, falling back to data wipe:', e);
+  }
+
+  // Fallback (function not deployed): wipe data rows, but the login survives
   try {
     const user = await getUser();
     if (user) {
