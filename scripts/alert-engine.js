@@ -1,6 +1,7 @@
 'use strict';
 
 const { buildEmail } = require('./email-template.js');
+const { sendPush } = require('./webpush.js');
 
 // ── SCHEME MAP (mirrors mfapi.js) ──
 const SCHEME_MAP = {
@@ -201,6 +202,34 @@ async function fetchEmailPrefs(supabaseUrl, serviceKey) {
   }
 }
 
+// push_subscriptions grouped by user. Missing table (schema.sql not run yet)
+// must not break the engine — push just degrades to off with a warning.
+async function fetchPushSubs(supabaseUrl, serviceKey) {
+  try {
+    const url = `${supabaseUrl}/rest/v1/push_subscriptions?select=user_id,endpoint,p256dh,auth`;
+    const res = await fetch(url, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    const byUser = {};
+    for (const r of rows) (byUser[r.user_id] ||= []).push(r);
+    return byUser;
+  } catch (err) {
+    console.warn(`  ⚠ Could not load push_subscriptions (${err.message}) — push channel off for this run. Run db/schema.sql if you haven't.`);
+    return {};
+  }
+}
+
+async function deletePushSub(supabaseUrl, serviceKey, endpoint) {
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`, {
+      method: 'DELETE',
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+    });
+  } catch (e) { /* best-effort cleanup */ }
+}
+
 async function sendEmail(to, subject, html, resendKey, fromEmail) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -225,17 +254,29 @@ async function main() {
     process.exit(1);
   }
 
+  // Push channel is optional: engine runs email-only when VAPID secrets are absent
+  const VAPID = (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+    ? {
+        publicKey:  process.env.VAPID_PUBLIC_KEY,
+        privateKey: process.env.VAPID_PRIVATE_KEY,
+        subject:    process.env.VAPID_SUBJECT || `mailto:${FROM_EMAIL}`,
+      }
+    : null;
+  if (!VAPID) console.log('Push channel off (VAPID secrets not set) — email only.');
+
   console.log('FundPulse Alert Engine starting...');
 
   // Step 1: fetch data in parallel
-  const [alertConfigs, watchlistRows, userEmails, emailPrefs] = await Promise.all([
+  const [alertConfigs, watchlistRows, userEmails, emailPrefs, pushSubs] = await Promise.all([
     fetchAlertConfigs(SUPABASE_URL, SERVICE_KEY),
     fetchWatchlist(SUPABASE_URL, SERVICE_KEY),
     fetchUserEmails(SUPABASE_URL, SERVICE_KEY),
     fetchEmailPrefs(SUPABASE_URL, SERVICE_KEY),
+    VAPID ? fetchPushSubs(SUPABASE_URL, SERVICE_KEY) : Promise.resolve({}),
   ]);
 
-  console.log(`Loaded: ${alertConfigs.length} alert configs | ${watchlistRows.length} watchlist rows | ${Object.keys(userEmails).length} users`);
+  const pushSubCount = Object.values(pushSubs).reduce((a, s) => a + s.length, 0);
+  console.log(`Loaded: ${alertConfigs.length} alert configs | ${watchlistRows.length} watchlist rows | ${Object.keys(userEmails).length} users | ${pushSubCount} push subscriptions`);
 
   // build fund name/cat lookup: "userId:fundId" → name/cat
   const fundNameMap = {};
@@ -284,29 +325,30 @@ async function main() {
   const isoToday    = navDateToISO(todayISTString());
   const alreadySent = await fetchSentAlerts(SUPABASE_URL, SERVICE_KEY, isoToday);
 
-  // Steps 4+5: check thresholds + send emails
-  let sent    = 0;
-  let errors  = 0;
-  let deduped = 0;
+  // Steps 4+5: check thresholds + send emails and pushes
+  let sent     = 0;
+  let pushSent = 0;
+  let errors   = 0;
+  let deduped  = 0;
 
   for (const config of alertConfigs) {
     const nav = navMap[config.fund_id];
     if (!nav) continue;
 
-    if (emailPrefs[config.user_id] === false) {
-      console.log(`  ○ Email alerts turned off in Settings for user ${config.user_id} — skipping`);
-      continue;
-    }
-    if (!wantsEmail(config)) {
-      console.log(`  ○ ${config.fund_id}: user's channels exclude email — skipping (other channels not live yet)`);
-      continue;
-    }
-
     const triggers = checkThresholds(config, nav.pctChange);
     if (!triggers.length) continue;
 
     const email = userEmails[config.user_id];
-    if (!email) { console.warn(`  ⚠ No email found for user: ${config.user_id}`); continue; }
+    // email goes out only if: settings kill-switch is on, the fund's channels
+    // include email, and we actually have an address. Push has its own opt-in
+    // (a stored subscription) and is not gated by the email switch.
+    const emailAllowed = emailPrefs[config.user_id] !== false && wantsEmail(config) && !!email;
+    const subs = (VAPID && pushSubs[config.user_id]) || [];
+    if (!emailAllowed && !subs.length) {
+      console.log(`  ○ ${config.fund_id}: no deliverable channel for user ${config.user_id} — skipping`);
+      continue;
+    }
+    if (!email && !subs.length) { console.warn(`  ⚠ No email found for user: ${config.user_id}`); continue; }
 
     const key      = `${config.user_id}:${config.fund_id}`;
     const fundName = fundNameMap[key] || config.fund_id;
@@ -319,17 +361,59 @@ async function main() {
         continue;
       }
       const threshold = type === 'drop' ? config.drop_val : config.rise_val;
-      try {
-        const { subject, html } = buildEmail({
-          fundName, fundCat, type,
-          todayNav:  nav.todayNav,
-          pctChange: nav.pctChange,
-          threshold,
-          appUrl: APP_URL,
+
+      let emailOk = false;
+      if (emailAllowed) {
+        try {
+          const { subject, html } = buildEmail({
+            fundName, fundCat, type,
+            todayNav:  nav.todayNav,
+            pctChange: nav.pctChange,
+            threshold,
+            appUrl: APP_URL,
+          });
+          await sendEmail(email, subject, html, RESEND_KEY, FROM_EMAIL);
+          console.log(`  ✓ Sent ${type} alert → ${email} (${fundName}: ${nav.pctChange.toFixed(2)}%)`);
+          sent++;
+          emailOk = true;
+        } catch (err) {
+          console.error(`  ✗ Failed → ${email} (${fundName}): ${err.message}`);
+          errors++;
+        }
+      }
+
+      // push notifications: best-effort, dead subscriptions are pruned
+      let pushOk = false;
+      if (subs.length) {
+        const absPct = Math.abs(nav.pctChange).toFixed(2);
+        const payload = JSON.stringify({
+          title: `${type === 'drop' ? '📉' : '📈'} ${fundName} ${type === 'drop' ? 'fell' : 'rose'} ${absPct}% today`,
+          body:  `Unit price ₹${nav.todayNav.toFixed(2)} — past your ${threshold}% alert level.`,
+          url:   `${APP_URL}/app/alerts.html`,
         });
-        await sendEmail(email, subject, html, RESEND_KEY, FROM_EMAIL);
-        console.log(`  ✓ Sent ${type} alert → ${email} (${fundName}: ${nav.pctChange.toFixed(2)}%)`);
-        sent++;
+        for (const s of subs) {
+          try {
+            const r = await sendPush(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              payload, VAPID
+            );
+            if (r.ok) { pushSent++; pushOk = true; }
+            else if (r.gone) {
+              console.log(`  ○ push subscription expired for user ${config.user_id} — removing`);
+              await deletePushSub(SUPABASE_URL, SERVICE_KEY, s.endpoint);
+            } else {
+              console.warn(`  ⚠ push rejected (${r.status}) for user ${config.user_id}`);
+            }
+          } catch (err) {
+            console.warn(`  ⚠ push failed for user ${config.user_id}: ${err.message}`);
+          }
+        }
+        if (pushOk) console.log(`  ✓ Sent ${type} push → user ${config.user_id} (${fundName})`);
+      }
+
+      // log for dedup + the alerts screen. If email was allowed but failed,
+      // don't log — the next run should retry it.
+      if (emailOk || (!emailAllowed && pushOk)) {
         await logSentAlert(SUPABASE_URL, SERVICE_KEY, {
           user_id:    config.user_id,
           fund_id:    config.fund_id,
@@ -338,18 +422,15 @@ async function main() {
           pct_change: Number(nav.pctChange.toFixed(4)),
           today_nav:  nav.todayNav,
           threshold:  Number(threshold) || null,
-          channel:    'email',
+          channel:    emailOk ? 'email' : 'push',
           nav_date:   navDateToISO(nav.navDate),
         });
-      } catch (err) {
-        console.error(`  ✗ Failed → ${email} (${fundName}): ${err.message}`);
-        errors++;
       }
     }
   }
 
-  console.log(`\nDone. ${sent} email(s) sent, ${errors} error(s), ${deduped} skipped as already sent.`);
-  if (sent === 0 && errors > 0) process.exit(1);
+  console.log(`\nDone. ${sent} email(s) sent, ${pushSent} push(es) sent, ${errors} error(s), ${deduped} skipped as already sent.`);
+  if (sent === 0 && pushSent === 0 && errors > 0) process.exit(1);
 }
 
 if (require.main === module) {

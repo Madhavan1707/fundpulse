@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="dark"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
+  <meta name="theme-color" content="#070c18"/>
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png"/>
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg"/>
   <title>FundPulse — Know When Your Funds Move</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -718,6 +722,11 @@
 <script>
 const SUPABASE_URL  = 'https://acwrtldncexhhlzutppv.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjd3J0bGRuY2V4aGhsenV0cHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNzQ4NzcsImV4cCI6MjA5Mzk1MDg3N30.DTojjCkw2xY-XQ_-AOai5VlKHsN98XBpgt8AalN4cj4';
+
+// Register the service worker (PWA install + push notifications)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(function () {});
+}
 
 // Load Supabase from CDN dynamically — guarantees it's ready before we use it
 function loadSupabase(callback) {
