@@ -1,0 +1,11 @@
+# Vercel serves only the static web app. These are backend/tooling files
+# that run elsewhere and must not affect framework auto-detection or the
+# static deploy output.
+supabase/
+db/
+scripts/
+docs/
+.github/
+.claude/
+.gstack/
+*.docx
