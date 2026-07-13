@@ -16,19 +16,21 @@
 
 alter table public.news enable row level security;
 
-drop policy if exists "news_public_read" on public.news;
+-- Drop EVERY existing policy on news, whatever it was named, then
+-- recreate the single read-only policy. This guards against permissive
+-- dashboard-created policies with unpredictable names.
+do $$
+declare p record;
+begin
+  for p in select polname from pg_policy where polrelid = 'public.news'::regclass loop
+    execute format('drop policy %I on public.news', p.polname);
+  end loop;
+end $$;
+
 create policy "news_public_read"
   on public.news for select
   to anon, authenticated
   using (true);
-
--- Remove any permissive write policies that may exist from setup
-drop policy if exists "news_insert" on public.news;
-drop policy if exists "news_update" on public.news;
-drop policy if exists "news_delete" on public.news;
-drop policy if exists "Enable insert for all users" on public.news;
-drop policy if exists "Enable delete for all users" on public.news;
-drop policy if exists "Enable update for all users" on public.news;
 
 -- ── 2. ALERT LOG ────────────────────────────────────────────
 -- One row per alert email actually sent. The unique constraint is
