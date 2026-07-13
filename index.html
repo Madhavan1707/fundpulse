@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark"/>
   <title>FundPulse — Know When Your Funds Move</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet" />
   <style>
+    @view-transition { navigation: auto; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --navy:       #070c18;
@@ -441,6 +443,18 @@
     .mswitch { text-align:center; margin-top:13px; font-size:.74rem; color:var(--muted); }
     .mswitch a { color:var(--blue-light); cursor:pointer; }
     .mswitch a:hover { text-decoration:underline; }
+    /* live password requirements — shown under the signup password field */
+    .pw-checklist { display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+    .pw-req { font-size:.64rem; font-weight:600; color:var(--muted-2); background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:100px; padding:3px 9px; transition:all .2s; }
+    .pw-req::before { content:'○ '; }
+    .pw-req.ok { color:var(--green); background:rgba(0,212,126,.08); border-color:rgba(0,212,126,.25); }
+    .pw-req.ok::before { content:'✓ '; }
+    /* signup consent row */
+    .consent-row { display:flex; align-items:flex-start; gap:9px; margin:2px 0 12px; cursor:pointer; }
+    .consent-row input { margin-top:2px; accent-color:var(--blue); cursor:pointer; flex-shrink:0; width:14px; height:14px; }
+    .consent-row span { font-size:.7rem; color:var(--muted); line-height:1.55; }
+    .consent-row a { color:var(--blue-light); text-decoration:none; }
+    .consent-row a:hover { text-decoration:underline; }
     .mdiv { display:flex; align-items:center; gap:9px; margin:15px 0; color:var(--muted); font-size:.7rem; }
     .mdiv::before,.mdiv::after { content:''; flex:1; height:1px; background:var(--cb); }
     .cbox { text-align:center; padding:16px; background:rgba(35,96,245,.06); border-radius:9px; border:1px dashed rgba(35,96,245,.2); font-size:.77rem; color:var(--muted); line-height:1.6; }
@@ -514,7 +528,7 @@
           <div class="sp-av">R</div><div class="sp-av">A</div>
           <div class="sp-av">S</div><div class="sp-av">K</div>
         </div>
-        <span class="sp-t"><b>847 investors</b> are already ahead — what are you waiting for?</span>
+        <span class="sp-t">Your funds move while you sleep — <b>be the first to know</b>.</span>
       </div>
     </div>
     <!-- RIGHT: notification cards -->
@@ -524,7 +538,7 @@
         <div class="nc-ico">📉</div>
         <div class="nc-body">
           <div class="nc-fund">SBI PSU Direct Fund</div>
-          <div class="nc-desc">NAV dropped <b class="r">−3.2%</b> today. Govt disinvestment plan delayed — markets reacting.</div>
+          <div class="nc-desc">Unit price dropped <b class="r">−3.2%</b> today. Govt disinvestment plan delayed — markets reacting.</div>
           <div class="nc-time">Today · 9:42 PM · Email</div>
         </div>
       </div>
@@ -533,7 +547,7 @@
         <div class="nc-ico">📈</div>
         <div class="nc-body">
           <div class="nc-fund">Parag Parikh Flexi Cap</div>
-          <div class="nc-desc">NAV up <b class="g">+2.1%</b> — crossed your alert threshold.</div>
+          <div class="nc-desc">Unit price up <b class="g">+2.1%</b> — crossed your alert threshold.</div>
           <div class="nc-time">Yesterday · 9:55 PM · WhatsApp</div>
         </div>
       </div>
@@ -572,7 +586,7 @@
     <div class="steps">
       <div class="sr reveal d2"><div class="sn">1</div><div class="sc"><div class="stl">Pick your funds</div><div class="sbd">Search any mutual fund or ETF by name. Add it to your watchlist in one tap. No account linking, no broker login, no financial data needed.</div></div></div>
       <div class="sr reveal d3"><div class="sn">2</div><div class="sc"><div class="stl">Set your alert rules</div><div class="sbd">Tell us what matters. "Notify me if HDFC Flexi Cap goes up 2%." "Alert me if SBI PSU drops 3%." Simple and yours.</div></div></div>
-      <div class="sr reveal d4"><div class="sn">3</div><div class="sc"><div class="stl">We watch. You get notified.</div><div class="sbd">FundPulse monitors NAV changes every day after market close. The moment your threshold is crossed — you hear about it via Email, WhatsApp, or SMS.</div></div></div>
+      <div class="sr reveal d4"><div class="sn">3</div><div class="sc"><div class="stl">We watch. You get notified.</div><div class="sbd">FundPulse checks unit prices every day after market close. The moment your threshold is crossed — you hear about it via Email, WhatsApp, or SMS.</div></div></div>
     </div>
   </div>
 </section>
@@ -583,7 +597,7 @@
     <span class="slbl reveal">What You Get</span>
     <h2 class="stit reveal d1">Everything you need.<br/>Nothing you don't.</h2>
     <div class="fg">
-      <div class="fc reveal d2"><div class="fi">🔔</div><div class="ftl">Smart Price Alerts</div><div class="fbd">Daily NAV movement, all-time highs, and drawdown alerts — all on your terms.</div></div>
+      <div class="fc reveal d2"><div class="fi">🔔</div><div class="ftl">Smart Price Alerts</div><div class="fbd">Daily unit price moves, all-time highs, and how far a fund has fallen from its best point — all on your terms.</div></div>
       <div class="fc reveal d2"><div class="fi">📰</div><div class="ftl">Focused News Feed</div><div class="fbd">News about only your funds. No noise from the rest of the market.</div></div>
       <div class="fc reveal d3"><div class="fi">👤</div><div class="ftl">Manager Change Alerts</div><div class="fbd">Know the day your fund manager changes — before it shows in your returns.</div></div>
       <div class="fc reveal d3"><div class="fi">📊</div><div class="ftl">Weekly Digest</div><div class="fbd">A clean Monday summary of your watchlist — shareable with friends.</div></div>
@@ -628,7 +642,7 @@
       <div class="tp reveal d2">🔒 No financial data required</div>
       <div class="tp reveal d2">💸 Free to start</div>
       <div class="tp reveal d3">🇮🇳 Built for Indian investors</div>
-      <div class="tp reveal d3">⚡ Daily NAV monitoring</div>
+      <div class="tp reveal d3">⚡ Daily unit price checks</div>
       <div class="tp reveal d4">📲 Email, WhatsApp & SMS</div>
       <div class="tp reveal d4">🚫 No spam, ever</div>
     </div>
@@ -652,7 +666,7 @@
       <span class="cta-chip">⚡ Setup in 30 seconds</span>
       <span class="cta-chip">💸 Free forever</span>
     </div>
-    <p class="cta-proof reveal d4"><b>847 investors</b> are already ahead — what are you waiting for?</p>
+    <p class="cta-proof reveal d4">Free to start · <b>Set up in 30 seconds</b> · No portfolio data needed</p>
   </div>
 </section>
 
@@ -744,6 +758,40 @@ function openModal(t){tab=t;document.getElementById('ovl').classList.add('open')
 function closeModal(){document.getElementById('ovl').classList.remove('open');document.body.style.overflow='';}
 function ovc(e){if(e.target===document.getElementById('ovl'))closeModal();}
 function switchTab(t){tab=t;render();}
+function escAttr(s){ return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// shared signup form — used by render() and editEmail() so the password
+// checklist and consent row can never drift between the two
+function signupFormHTML(name, email){
+  return `
+    <div class="mf"><label class="ml">Full name</label><input class="mi" type="text" placeholder="Your name" value="${escAttr(name)}"/></div>
+    <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com" value="${escAttr(email)}"/></div>
+    <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="Create a password" oninput="updatePwChecklist(this.value)"/>
+      <div class="pw-checklist">
+        <span class="pw-req" id="pw-len">8+ characters</span>
+        <span class="pw-req" id="pw-cap">1 capital letter</span>
+        <span class="pw-req" id="pw-num">1 number</span>
+      </div>
+    </div>
+    <label class="consent-row">
+      <input type="checkbox" id="consent-check"/>
+      <span>I agree to the <a href="privacy.html" target="_blank" onclick="event.stopPropagation()">Privacy Policy</a> and understand FundPulse shares information about funds — never advice on what to buy or sell.</span>
+    </label>
+    <button class="mb" onclick="ha('signup')">Create Free Account</button>
+    <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
+  `;
+}
+
+function updatePwChecklist(pw){
+  const len = document.getElementById('pw-len');
+  const cap = document.getElementById('pw-cap');
+  const num = document.getElementById('pw-num');
+  if (!len) return;
+  len.classList.toggle('ok', pw.length >= 8);
+  cap.classList.toggle('ok', /[A-Z]/.test(pw));
+  num.classList.toggle('ok', /[0-9]/.test(pw));
+}
+
 function render(){
   const li=tab==='login';
   document.getElementById('tl').className='mtab'+(li?' on':'');
@@ -754,13 +802,7 @@ function render(){
     <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="••••••••"/></div>
     <button class="mb" onclick="ha('login')">Log in to FundPulse</button>
     <div class="mswitch">No account? <a onclick="switchTab('signup')">Sign up free</a></div>
-  `:`
-    <div class="mf"><label class="ml">Full name</label><input class="mi" type="text" placeholder="Your name"/></div>
-    <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com"/></div>
-    <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="Create a password"/></div>
-    <button class="mb" onclick="ha('signup')">Create Free Account</button>
-    <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
-  `;
+  `:signupFormHTML('', '');
 }
 
 // show "check your email" screen inside the modal
@@ -824,13 +866,7 @@ function editEmail() {
   document.getElementById('tl').className = 'mtab';
   document.getElementById('ts').className = 'mtab on';
   document.getElementById('msub').textContent = 'Start tracking your funds free';
-  document.getElementById('mform').innerHTML = `
-    <div class="mf"><label class="ml">Full name</label><input class="mi" type="text" placeholder="Your name" value="${pendingSignupName}"/></div>
-    <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com" value="${pendingSignupEmail}"/></div>
-    <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="Create a password"/></div>
-    <button class="mb" onclick="ha('signup')">Create Free Account</button>
-    <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
-  `;
+  document.getElementById('mform').innerHTML = signupFormHTML(pendingSignupName, pendingSignupEmail);
 }
 
 async function resendVerification(email) {
@@ -919,8 +955,14 @@ function ha(type){
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     if(!emailOk){ showFieldError(emailInput, 'Please enter a valid email address.'); return; }
     if (!pass || pass.length < 8) { showFieldError(passInput, 'Password must be at least 8 characters.'); return; }
-    if (!/[A-Z]/.test(pass)) { showFieldError(passInput, 'Add at least one uppercase letter (A–Z).'); return; }
+    if (!/[A-Z]/.test(pass)) { showFieldError(passInput, 'Add at least one capital letter (A–Z).'); return; }
     if (!/[0-9]/.test(pass)) { showFieldError(passInput, 'Add at least one number (0–9).'); return; }
+
+    const consent = document.getElementById('consent-check');
+    if (consent && !consent.checked) {
+      showFieldError(consent, 'Please agree before creating your account.', consent.closest('.consent-row'));
+      return;
+    }
 
     b.textContent = 'Creating account…'; b.style.opacity = '.65';
 
