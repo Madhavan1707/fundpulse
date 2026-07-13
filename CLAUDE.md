@@ -34,14 +34,16 @@ Frontend will stay as plain HTML/JS until there is a validated user base — Nex
 
 | File | Status | Purpose |
 |---|---|---|
-| `index.html` | Frozen | Landing page, signup/login modals, Supabase auth (inline) |
-| `verified.html` | Working | Post email-verification confirmation (inline Supabase) |
-| `app/feed.html` | Frozen | News feed (default landing after login) |
-| `app/alerts.html` | Frozen | Per-fund alert configuration |
-| `app/watchlist.html` | Frozen | Watchlist management + fund stats |
+| `index.html` | Working | Landing page, signup/login modals, Supabase auth (inline). Signup asks name/email/password only — **no phone** (phone is asked later when WhatsApp alerts launch) |
+| `verified.html` | Working | Post email-verification confirmation (inline Supabase). Phone-OTP step only runs if `fp_pending_phone` exists (legacy / future WhatsApp opt-in) |
+| `privacy.html` | Working | Privacy policy + "not investment advice" disclaimer (linked from landing footer and alert emails) |
+| `app/feed.html` | Working | News feed (default landing after login) |
+| `app/alerts.html` | Working | Per-fund alert configuration + real alert history from `alert_log` |
+| `app/watchlist.html` | Working | Watchlist management + live NAV stats |
 | `app/supabase.js` | Working | Shared auth, data, and UI helpers loaded by all app screens |
-| `app/profile.html` | Not built | Phase 2 — name, email, notification prefs |
-| `app/settings.html` | Not built | Phase 2 — navigating to Settings tab currently causes a 404 |
+| `app/profile.html` | Working | Name edit, email display, password reset |
+| `app/settings.html` | Working | Email alerts toggle, default thresholds, password reset, delete account |
+| `app/mfapi.js` | Working | Live NAV fetch + fund search against mfapi.in (feed, watchlist) |
 
 **Important:** `index.html` and `verified.html` define their own inline Supabase client (same credentials) and do **not** load `app/supabase.js`. Only `app/feed.html`, `app/alerts.html`, and `app/watchlist.html` use `supabase.js`.
 
@@ -61,7 +63,10 @@ What it exports (global functions):
 | `fetchAlertConfig()` | Returns object keyed by `fund_id` |
 | `saveAlertConfig(fundId, cfg)` / `deleteAlertConfig(fundId)` | Supabase writes |
 | `fetchProfile()` | Reads `profiles` table |
-| `initProfileDrawer()` | Injects the slide-up profile drawer into the page. Takes **no arguments** — reads `fp_username` and `fp_email` from localStorage directly |
+| `fetchSettings()` / `saveSettings()` | `profiles` columns: `email_alerts_on`, `default_drop_val`, `default_rise_val`, `whatsapp_number` |
+| `saveProfileName(fullName)` | Upserts `profiles.full_name` + syncs auth metadata |
+| `fetchAlertHistory(limit)` | Reads own rows from `alert_log` (real alerts the engine sent). Returns `[]` if table missing |
+| `initProfileDrawer()` | Injects the slide-up profile drawer into the page. Takes **no arguments** — reads `fp_username` and `fp_email` from localStorage directly (HTML-escaped before injection) |
 
 ## Boot Sequence Pattern
 
@@ -88,9 +93,15 @@ Inside `boot()`:
 |---|---|---|
 | `watchlist` | `user_id`, `fund_id`, `fund_name`, `fund_amc`, `fund_cat`, `added_at` | feed, alerts, watchlist |
 | `alert_config` | `user_id`, `fund_id`, `drop_on`, `drop_val`, `rise_on`, `rise_val`, `manager_on`, `channels`, `updated_at` | alerts, watchlist |
-| `profiles` | `id`, `full_name` (and others) | verified.html, future profile screen |
+| `profiles` | `id`, `full_name`, `email_alerts_on`, `default_drop_val`, `default_rise_val`, `whatsapp_number` | verified, profile, settings, alert engine |
+| `news` | `article_id`, `title`, `description`, `source_name`, `url`, `published_at`, `fund_tags` | feed (read), news-fetcher (service-role write) |
+| `alert_log` | `user_id`, `fund_id`, `fund_name`, `alert_type`, `pct_change`, `today_nav`, `threshold`, `channel`, `nav_date`, `sent_at` | alerts screen (read own), alert engine (service-role write, dedup key `user_id,fund_id,alert_type,nav_date`) |
 
 `upsert` with `onConflict: 'user_id,fund_id'` is used for both watchlist and alert_config writes.
+
+**RLS:** `db/schema.sql` is the source of truth — run it in Supabase SQL Editor after any table change. Critical: `news` must be select-only for clients (anon INSERT/DELETE was open until 2026-07-13); `alert_log` is select-own only; only the service role writes news/alert_log. `watchlist`/`alert_config`/`profiles` are scoped to `auth.uid()`.
+
+**Edge Functions:** `supabase/functions/delete-account` deletes a user's data + auth account (settings screen calls it, with a client-side data-wipe fallback if not deployed). Deploy: `supabase functions deploy delete-account`.
 
 ## localStorage Key Structure
 
@@ -104,7 +115,11 @@ Keys are **not** UID-scoped in the current code — they are generic. The concep
 | `fp_email` | index.html (login), feed.html (sync) | supabase.js (drawer) | Email string |
 | `fp_alert_config` | alerts.html | alerts.html, watchlist.html | JSON object keyed by fund_id |
 | `fp_expand_fund` | watchlist.html | alerts.html (on load, then removed) | Fund id to auto-expand |
-| `fp_swipe_tutored` | feed.html | feed.html | `'1'` once swipe tutorial has run |
+| `fp_settings` | settings.html | settings.html, alerts.html (default thresholds) | JSON settings object |
+| `fp_read` / `fp_bookmarks` | feed.html | feed.html | JSON arrays of article ids (capped at 200) |
+| `fp_nav_<schemeCode>` | mfapi.js | mfapi.js | Cached NAV; kept all day once it's today's published NAV, else 1h TTL |
+| `fp_fund_list` / `fp_fund_list_ts` | mfapi.js | mfapi.js, feed, watchlist | Slimmed Direct+Growth AMFI scheme list, 24h TTL, in-memory fallback on quota failure |
+| `fp_pending_phone` | (future WhatsApp opt-in flow only) | index.html, verified.html | E.164 phone awaiting OTP — no longer set at signup |
 
 `signOut()` in supabase.js calls `localStorage.clear()` (clears everything). `clearUserData()` in index.html removes specific keys on new login.
 
@@ -133,16 +148,14 @@ When fetched back from Supabase, they are mapped: `{ id: r.fund_id, name: r.fund
 
 `saveAlertConfig(fundId, cfg)` maps this to flat DB columns: `drop_on`, `drop_val`, `rise_on`, `rise_val`, `manager_on`, `channels`.
 
-## Static / Demo Data (Not Yet Live)
+## Data Sources (All Live — No Fake Data Rule)
 
-All three data sources are currently hardcoded — backend connections are Phase 3:
+- **Fund search** — live AMFI list from mfapi.in (Direct+Growth schemes only), with the 10 hardcoded funds (`FUNDS` in feed.html, `ALL_FUNDS` in watchlist.html) as offline fallback
+- **Unit prices** — live mfapi.in NAV via `app/mfapi.js` (`fetchNAVs`)
+- **News** — `news` table, populated by `scripts/news-fetcher.js` (NewsData.io) every 2h via GitHub Actions
+- **Alert history** — `alert_log` table, written by the engine when it actually sends an email
 
-- **10 hardcoded funds** — defined in `FUNDS` (feed.html) and `ALL_FUNDS` (watchlist.html): SBI PSU, HDFC Flexi Cap, Parag Parikh Flexi Cap, Quant Small Cap, Mirae Asset Large Cap, Axis Bluechip, ICICI Pru Technology, Nippon India Small Cap, HDFC Nifty 50, Motilal Oswal Midcap
-- **10 hardcoded news articles** — in `NEWS` array (feed.html), each with jargon-free summaries and optional alert badge
-- **Hardcoded demo prices** — `DEMO_PRICES` in watchlist.html (e.g. `₹28.34 −3.2%`)
-- **Hardcoded alert history** — `ALL_HISTORY` in alerts.html (7 sample entries)
-
-When Phase 3 connects the backend: fund list comes from mfapi.in, news from NewsData.io, prices from mfapi.in daily NAV.
+**Rule: never show fabricated data as if it were real.** The old hardcoded demo history/prices are gone — an alerts product that shows alerts that never happened loses trust permanently. Empty states are fine; fake data is not.
 
 ## Alert Types
 
@@ -154,22 +167,16 @@ When Phase 3 connects the backend: fund list comes from mfapi.in, news from News
 
 All-time high, drawdown, and AUM change alerts are in the product concept but not yet implemented in the UI.
 
-## Swipe Gesture Direction (feed.html)
+**Channels:** only Email is live. WhatsApp/SMS pills in alerts.html show a "SOON" badge and a coming-soon toast — they cannot be selected. The engine also gates on this server-side (`wantsEmail()`), and on the Settings kill-switch (`profiles.email_alerts_on`).
 
-- **Swipe right** → bookmark (gold `Saved` tag on card)
-- **Swipe left** → dismiss (card slides out and collapses)
+## Backend Connections (Live)
 
-The `swipe-action-left` div (behind the card on the left) shows the bookmark icon, and `swipe-action-right` shows the dismiss icon — but the actual swipe handlers are wired the opposite way. The swipe tutorial currently has a visual mismatch because of this z-index/overflow issue (known open TODO).
-
-## Planned Backend Connections (Phase 3)
-
-| Integration | Purpose | API |
+| Integration | Purpose | Notes |
 |---|---|---|
-| mfapi.in | Live NAV data + fund search | Free, no key needed |
-| NewsData.io / GNews | News feed | Free tier, keyword search |
-| GitHub Actions cron | Alert engine (runs daily at 9:30 PM IST after AMFI publishes NAV) | Free |
-| Resend | Email alerts | 3,000/month free |
-| WhatsApp Business Cloud API | WhatsApp alerts | 1,000 conv/month free (Phase 3 / Premium) |
+| mfapi.in | Live NAV data + fund search | Free, no key. Engine retries 3× with 15s timeout |
+| NewsData.io | News feed | Free tier; fetched every 2h by GitHub Actions |
+| GitHub Actions cron | Alert engine, daily 10:00 PM IST (`30 16 * * *` UTC) | Skips stale NAVs (weekend/holiday), dedups via `alert_log` |
+| Resend | Email alerts | Free tier: 100/day, 3,000/month — this caps alert volume until a domain is bought |
 
 ## Deletion Consent Rule
 
@@ -210,21 +217,28 @@ FundPulse must never use financial jargon anywhere — news cards, alert message
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Landing page | ✅ Frozen |
-| 2 | Web app core (feed + alerts + watchlist + Supabase auth) | ✅ Frozen — all screens built and connected |
-| 3 | Real alert engine + live NAV (mfapi.in) + live news (NewsData.io) + email (Resend) | Next |
-| 4 | WhatsApp alerts, Hindi support, trending funds, sentiment reactions | Future |
+| 1 | Landing page | ✅ Done |
+| 2 | Web app core (feed + alerts + watchlist + Supabase auth) | ✅ Done |
+| 3 | Real alert engine + live NAV (mfapi.in) + live news (NewsData.io) + email (Resend) + settings/profile + privacy policy | ✅ Done |
+| 4 | **Deferred until it scales** (deliberate, free-tier first — see below) | Future |
+
+### Phase 4 — Deferred Until It Scales
+
+Deliberately postponed while the product is free-tier and pre-validation:
+
+- **Custom domain + email deliverability**: buy a domain, verify it in Resend, set SPF/DKIM, add a one-click `List-Unsubscribe` header (Gmail bulk-sender requirement). Until then alerts send from the Resend shared domain and are capped at 100/day.
+- **WhatsApp alerts**: WhatsApp Business Cloud API. When this ships, re-enable the phone flow — ask for the number **at WhatsApp opt-in, not signup** (set `fp_pending_phone`, route through the existing OTP step in `verified.html`, store in `profiles.whatsapp_number`).
+- **SMS alerts**: after WhatsApp.
+- **Manager-change alerts**: toggle exists in UI (`manager_on`) but no data source watches it yet.
+- **Hindi support, trending funds, sentiment reactions.**
+- **Analytics** (Plausible/PostHog) before serious marketing, to see the activation funnel.
+- **Monetisation**: free 3 funds → premium unlimited + WhatsApp (see tiers below).
 
 ## Open TODOs (Known, Agreed, Pending)
 
-- **Settings screen** (`app/settings.html`): not built. Clicking the Settings tab in any screen navigates to `settings.html` which returns a 404.
-- **Profile screen** (`app/profile.html`): not built. Drawer shows "coming soon" placeholders for Profile, Appearance, Preferences.
+- **Run `db/schema.sql`** in Supabase SQL Editor (news lockdown + `alert_log`) and **deploy the delete-account edge function** (`supabase functions deploy delete-account`). Until then: news table is writable by anyone with the anon key, engine dedup degrades to off, delete-account falls back to data-wipe-only.
 - **Cross-device email verification**: polling with `refreshSession()` implemented in index.html but not fully tested due to Supabase rate limits. Verify email template in Supabase Dashboard redirects to `verified.html`. Temporarily disable email confirmation in Supabase during local testing.
-- **Swipe tutorial animation**: The `swipe-action-left` background (bookmark/gold) and `swipe-action-right` background (dismiss/red) should be revealed when the card physically slides. Currently the card slides but the backgrounds aren't cleanly visible — z-index/overflow issue on `.swipe-wrapper`.
-- **UID-scoped localStorage**: The concept doc describes this as fixed, but the code still uses generic keys. If two users log in on the same browser, logout + `clearUserData()` clears the previous user's data, but there's no true isolation. Fix would be: scope all keys to `fp_funds_<uid>` etc.
-- **Real alert engine**: Phase 3. All alert config is stored in Supabase — ready to connect a GitHub Actions cron job.
-- **Live unit prices and fund search**: Phase 3. Replace `DEMO_PRICES`, `FUNDS`, and `ALL_FUNDS` with live mfapi.in data.
-- **Password validation**: 8+ chars, one capital, one number check is partially implemented (checks length ≥ 8 only). Full validation not yet added.
+- **UID-scoped localStorage**: keys are generic, not per-user. If two users share a browser, logout + `clearUserData()` clears the previous user's data, but there's no true isolation. Fix would be: scope all keys to `fp_funds_<uid>` etc.
 
 ## Monetisation Tiers (For Context)
 
