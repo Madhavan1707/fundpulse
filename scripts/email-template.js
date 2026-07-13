@@ -67,9 +67,15 @@ function buildEmail({ fundName, fundCat, type, todayNav, pctChange, threshold, a
       </td></tr>
 
       <tr><td style="padding-top:20px;text-align:center;">
-        <p style="margin:0;font-size:0.72rem;color:#4a5878;">
+        <p style="margin:0 0 8px;font-size:0.72rem;color:#4a5878;">
           FundPulse &middot;
           <a href="${appUrl}/app/alerts.html" style="color:#4a5878;text-decoration:none;">Manage alerts</a>
+          &middot;
+          <a href="${appUrl}/privacy.html" style="color:#4a5878;text-decoration:none;">Privacy</a>
+        </p>
+        <p style="margin:0;font-size:0.66rem;color:#4a5878;line-height:1.6;">
+          This is information about a fund you chose to track — not investment advice.
+          You get this email because you set this alert; turn it off any time from the link above.
         </p>
       </td></tr>
 

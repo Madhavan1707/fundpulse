@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Privacy Policy — FundPulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --navy: #070c18; --navy-2: #0b1220; --navy-3: #0f1a2e; --navy-4: #142038;
+    --blue: #2360f5; --blue-light: #4a7cff;
+    --green: #00d47e; --red: #ff4060; --yellow: #ffb400;
+    --white: #edf2ff; --muted: #7a8fb0; --muted-2: #4a5878;
+    --cb: rgba(255,255,255,.08);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--navy); color:var(--white);
+    font-family:'Plus Jakarta Sans',sans-serif; line-height:1.7;
+    padding:0 20px 80px;
+  }
+  .wrap { max-width:640px; margin:0 auto; }
+  .top {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:26px 0 40px;
+  }
+  .logo {
+    font-family:'Outfit',sans-serif; font-weight:800; font-size:1rem;
+    color:var(--white); text-decoration:none; display:flex; align-items:center; gap:8px;
+  }
+  .logo-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); display:inline-block; }
+  .back {
+    font-size:.8rem; color:var(--blue-light); text-decoration:none; font-weight:500;
+  }
+  h1 {
+    font-family:'Outfit',sans-serif; font-weight:800; font-size:1.7rem;
+    letter-spacing:-0.02em; margin-bottom:6px;
+  }
+  .updated { font-size:.75rem; color:var(--muted-2); margin-bottom:36px; }
+  h2 {
+    font-family:'Outfit',sans-serif; font-weight:700; font-size:1.05rem;
+    margin:36px 0 12px; letter-spacing:-0.01em;
+  }
+  p, li { font-size:.88rem; color:var(--muted); margin-bottom:12px; }
+  ul { padding-left:20px; margin-bottom:12px; }
+  li { margin-bottom:6px; }
+  b, strong { color:var(--white); font-weight:600; }
+  .card {
+    background:var(--navy-3); border:1px solid var(--cb); border-radius:14px;
+    padding:20px 22px; margin:20px 0;
+  }
+  .card.warn { border-color:rgba(255,180,0,.25); }
+  .card p:last-child { margin-bottom:0; }
+  a { color:var(--blue-light); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="logo" href="index.html"><span class="logo-dot"></span>FundPulse</a>
+    <a class="back" href="index.html">← Back to FundPulse</a>
+  </div>
+
+  <h1>Privacy Policy</h1>
+  <div class="updated">Last updated: 13 July 2026</div>
+
+  <p>FundPulse is a small, independent service that watches the mutual funds and ETFs you
+  choose and notifies you when something happens. This page explains, in plain language,
+  what information we keep and what we do with it.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><b>Your name and email address</b> — so we can sign you in and send you the alerts you asked for.</li>
+    <li><b>Your phone number</b> — only if you choose to add one later for WhatsApp alerts. It is optional.</li>
+    <li><b>The funds you track and your alert settings</b> — that's the whole point of the product.</li>
+  </ul>
+  <p>That's it. FundPulse never asks for — and never wants — your bank details, PAN,
+  Aadhaar, investment amounts, or how many units you hold. You cannot buy or sell
+  anything through FundPulse.</p>
+
+  <h2>Where it lives</h2>
+  <p>Your account and settings are stored with <b>Supabase</b>, our database provider.
+  Alert emails are delivered through <b>Resend</b>, an email delivery service. Unit price
+  data comes from public AMFI data and news comes from public news sources — neither
+  involves your personal information.</p>
+
+  <h2>What we never do</h2>
+  <ul>
+    <li>We never sell your data or share it with advertisers.</li>
+    <li>We never send you anything you didn't ask for — alerts only fire on the rules you set.</li>
+    <li>We never contact you on the phone or ask you to invest in anything. If someone does this claiming to be FundPulse, it is a scam.</li>
+  </ul>
+
+  <h2>Deleting your data</h2>
+  <p>Open <b>Settings → Delete account</b> inside the app. This removes your watchlist,
+  alert settings, alert history, profile, and your login itself. There is no "we keep it
+  for 90 days" — it's gone.</p>
+
+  <div class="card warn">
+    <h2 style="margin-top:0;">Not investment advice</h2>
+    <p>FundPulse sends you <b>information</b> about funds you already chose to follow —
+    price moves, news, and changes. It never tells you what to buy, sell, or hold.
+    Nothing in this app, in our emails, or in our news feed is investment advice or a
+    recommendation. FundPulse is not registered with SEBI as an investment adviser.
+    Mutual fund investments are subject to market risks — please make your own decisions
+    or talk to a registered adviser.</p>
+  </div>
+
+  <h2>Questions</h2>
+  <p>Email <a href="mailto:madhavansrajangupta@gmail.com">madhavansrajangupta@gmail.com</a>
+  and a human (the person who built this) will reply.</p>
+</div>
+</body>
+</html>
