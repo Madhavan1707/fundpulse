@@ -16,12 +16,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **URL gotcha:** the Vercel *Domains* value `fundpulse-chi.vercel.app` is the stable public production URL. The per-deploy `fundpulse-<hash>-madhavan1707s-projects.vercel.app` URLs are build snapshots and are SSO-protected (that's normal). `fundpulse.vercel.app` is a **different, unrelated project** — do not use it.
 
 **What is live and verified:**
-- Landing + auth (signup asks name/email/password only — no phone), feed, alerts, watchlist, settings, profile, privacy page.
+- Landing + auth (signup asks name/email/password only — no phone; signup requires a consent checkbox and shows a live password checklist), feed, alerts, watchlist, settings, profile, privacy page.
 - Live NAV + fund search (mfapi.in), live news (`news-fetcher.js`, every 2h), email alerts (Resend).
+- **PWA + web push (2026-07-13):** installable app (`manifest.webmanifest`, `sw.js`, `icons/`), push channel in the engine (`scripts/webpush.js`, RFC 8291/8292 on plain node:crypto — no deps). Push opt-in is the "Notifications on this device" toggle in Settings; subscriptions live in `push_subscriptions` (table applied to prod). Push is free — it bypasses the Resend 100/day cap.
+- **Engagement features (2026-07-13):** feed pulse card ("All quiet" vs "X moved past your alert level"), 🔖 Saved tab, onboarding starter packs, watchlist 30-day sparklines, alerts threshold hints ("typically moves ±X%/day → alert reaches you ~N×/month"), sample-alert preview in Settings.
+- Feed fund tabs pull tagged news across the whole 7-day window (`overlaps` query merged with newest-50); all app screens render synchronously from localStorage before the auth SDK loads (no flash between pages).
 - **Alert engine** runs daily 10:00 PM IST via GitHub Actions. Manual run verified 2026-07-13: retries transient NAV failures, skips stale NAVs (no weekend/holiday duplicate emails), dedups via `alert_log`, exits green when there's nothing fresh. The old "All NAV fetches failed → exit 1" bug is fixed.
 - **Security:** `db/schema.sql` has been run — news table is read-only to clients (anon INSERT/DELETE were open before), `alert_log` created. `delete-account` edge function deployed. Verified live with the anon key.
 
-**GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`.
+**GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. The VAPID public key is also hardcoded in `app/settings.html` (`VAPID_PUBLIC_KEY` const) — client and engine must use the same pair; regenerating keys invalidates every stored subscription.
 
 **Still deliberately deferred (free-tier, pre-scale):** custom domain + email deliverability (SPF/DKIM, one-click unsubscribe; Resend free tier caps 100 emails/day), WhatsApp/SMS channels + phone OTP at opt-in, manager-change alert data source, analytics, monetisation. See "Phase 4" below.
 
@@ -69,7 +72,9 @@ Frontend will stay as plain HTML/JS until there is a validated user base — Nex
 | `app/supabase.js` | Working | Shared auth, data, and UI helpers loaded by all app screens |
 | `app/profile.html` | Working | Name edit, email display, password reset |
 | `app/settings.html` | Working | Email alerts toggle, default thresholds, password reset, delete account |
-| `app/mfapi.js` | Working | Live NAV fetch + fund search against mfapi.in (feed, watchlist) |
+| `app/mfapi.js` | Working | Live NAV fetch + fund search against mfapi.in (feed, watchlist, alerts, settings). Also exposes `typicalDailyMove()` / `estAlertsPerMonth()` for threshold hints |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Working | PWA: installable app, offline-tolerant cache, push + notification-click handlers. SW registered from `app/supabase.js` and inline in `index.html` |
+| `scripts/webpush.js` | Working | Dependency-free web push sender (RFC 8291 aes128gcm + RFC 8292 VAPID) used by the alert engine; tested in `scripts/webpush.test.js` |
 
 **Important:** `index.html` and `verified.html` define their own inline Supabase client (same credentials) and do **not** load `app/supabase.js`. Only `app/feed.html`, `app/alerts.html`, and `app/watchlist.html` use `supabase.js`.
 
@@ -122,6 +127,7 @@ Inside `boot()`:
 | `profiles` | `id`, `full_name`, `email_alerts_on`, `default_drop_val`, `default_rise_val`, `whatsapp_number` | verified, profile, settings, alert engine |
 | `news` | `article_id`, `title`, `description`, `source_name`, `url`, `published_at`, `fund_tags` | feed (read), news-fetcher (service-role write) |
 | `alert_log` | `user_id`, `fund_id`, `fund_name`, `alert_type`, `pct_change`, `today_nav`, `threshold`, `channel`, `nav_date`, `sent_at` | alerts screen (read own), alert engine (service-role write, dedup key `user_id,fund_id,alert_type,nav_date`) |
+| `push_subscriptions` | `user_id`, `endpoint` (unique), `p256dh`, `auth`, `created_at` | settings (insert/delete own via toggle), alert engine (service-role read all + prune dead endpoints) |
 
 `upsert` with `onConflict: 'user_id,fund_id'` is used for both watchlist and alert_config writes.
 
@@ -143,7 +149,7 @@ Keys are **not** UID-scoped in the current code — they are generic. The concep
 | `fp_expand_fund` | watchlist.html | alerts.html (on load, then removed) | Fund id to auto-expand |
 | `fp_settings` | settings.html | settings.html, alerts.html (default thresholds) | JSON settings object |
 | `fp_read` / `fp_bookmarks` | feed.html | feed.html | JSON arrays of article ids (capped at 200) |
-| `fp_nav_<schemeCode>` | mfapi.js | mfapi.js | Cached NAV; kept all day once it's today's published NAV, else 1h TTL |
+| `fp_nav_<schemeCode>` | mfapi.js | mfapi.js, watchlist (sparklines), alerts (threshold hints), feed (pulse card) | Cached NAV + `spark` (30-session series) + `dailyMoves` (60 daily %); kept all day once it's today's published NAV, else 1h TTL. Entries without `spark` are treated stale and refetched |
 | `fp_fund_list` / `fp_fund_list_ts` | mfapi.js | mfapi.js, feed, watchlist | Slimmed Direct+Growth AMFI scheme list, 24h TTL, in-memory fallback on quota failure |
 | `fp_pending_phone` | (future WhatsApp opt-in flow only) | index.html, verified.html | E.164 phone awaiting OTP — no longer set at signup |
 
@@ -193,7 +199,7 @@ When fetched back from Supabase, they are mapped: `{ id: r.fund_id, name: r.fund
 
 All-time high, drawdown, and AUM change alerts are in the product concept but not yet implemented in the UI.
 
-**Channels:** only Email is live. WhatsApp/SMS pills in alerts.html show a "SOON" badge and a coming-soon toast — they cannot be selected. The engine also gates on this server-side (`wantsEmail()`), and on the Settings kill-switch (`profiles.email_alerts_on`).
+**Channels:** Email and device push (web push) are live. WhatsApp/SMS pills in alerts.html show a "SOON" badge and a coming-soon toast — they cannot be selected. Email is gated server-side by `wantsEmail()` and the Settings kill-switch (`profiles.email_alerts_on`); push is gated only by the existence of a `push_subscriptions` row (the Settings toggle creates/deletes it). If email is allowed but fails, no `alert_log` row is written so the next run retries; push-only sends log with `channel: 'push'`.
 
 ## Backend Connections (Live)
 
