@@ -218,7 +218,7 @@ async function main() {
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const RESEND_KEY   = process.env.RESEND_API_KEY;
   const FROM_EMAIL   = process.env.RESEND_FROM_EMAIL;
-  const APP_URL      = process.env.APP_URL || 'https://fundpulse.vercel.app';
+  const APP_URL      = process.env.APP_URL || 'https://fundpulse-madhavan1707s-projects.vercel.app';
 
   if (!SUPABASE_URL || !SERVICE_KEY || !RESEND_KEY || !FROM_EMAIL) {
     console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL');
