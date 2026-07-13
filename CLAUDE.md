@@ -2,6 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Live Status (as of 2026-07-13)
+
+**FundPulse is LIVE and public.** Phase 3 (real backend) is shipped end to end.
+
+| Thing | Value |
+|---|---|
+| **Public site (share this)** | **https://fundpulse-chi.vercel.app** |
+| GitHub repo | https://github.com/Madhavan1707/fundpulse (branch: `main`) |
+| Hosting | Vercel, auto-deploys on push to `main`, zero-config static |
+| Supabase project | `acwrtldncexhhlzutppv` (`https://acwrtldncexhhlzutppv.supabase.co`) |
+
+**URL gotcha:** the Vercel *Domains* value `fundpulse-chi.vercel.app` is the stable public production URL. The per-deploy `fundpulse-<hash>-madhavan1707s-projects.vercel.app` URLs are build snapshots and are SSO-protected (that's normal). `fundpulse.vercel.app` is a **different, unrelated project** — do not use it.
+
+**What is live and verified:**
+- Landing + auth (signup asks name/email/password only — no phone), feed, alerts, watchlist, settings, profile, privacy page.
+- Live NAV + fund search (mfapi.in), live news (`news-fetcher.js`, every 2h), email alerts (Resend).
+- **Alert engine** runs daily 10:00 PM IST via GitHub Actions. Manual run verified 2026-07-13: retries transient NAV failures, skips stale NAVs (no weekend/holiday duplicate emails), dedups via `alert_log`, exits green when there's nothing fresh. The old "All NAV fetches failed → exit 1" bug is fixed.
+- **Security:** `db/schema.sql` has been run — news table is read-only to clients (anon INSERT/DELETE were open before), `alert_log` created. `delete-account` edge function deployed. Verified live with the anon key.
+
+**GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`.
+
+**Still deliberately deferred (free-tier, pre-scale):** custom domain + email deliverability (SPF/DKIM, one-click unsubscribe; Resend free tier caps 100 emails/day), WhatsApp/SMS channels + phone OTP at opt-in, manager-change alert data source, analytics, monetisation. See "Phase 4" below.
+
 ## gstack
 Use /browse from gstack for all web browsing, never use mcp__claude-in-chrome__* tools.
 Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
@@ -25,8 +48,11 @@ Positioning: "Google Alerts, but purpose-built for Mutual Funds and ETFs."
 
 No build step, no package manager. Development workflow:
 - Edit `.html`, `.css`, `.js` files directly
-- Open the relevant HTML file in a browser or use a local static server
-- Deployed on Vercel (plain static files)
+- Open the relevant HTML file in a browser or use a local static server (`python -m http.server`)
+- Push to `main` → Vercel auto-deploys to https://fundpulse-chi.vercel.app
+- `.vercelignore` keeps backend-only dirs (`supabase/`, `db/`, `scripts/`, `docs/`) out of the web deploy — the static site is served zero-config, so anything that flips Vercel's framework detection breaks it.
+
+Node scripts (`scripts/`) run in GitHub Actions, not Vercel. Tests: `node --test scripts/` (38 tests). Run before pushing anything in `scripts/`.
 
 Frontend will stay as plain HTML/JS until there is a validated user base — Next.js migration is deferred deliberately.
 
