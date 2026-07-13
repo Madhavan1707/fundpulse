@@ -29,6 +29,14 @@
     return new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
   }
 
+  // Today in mfapi's DD-MM-YYYY format — to tell whether a cached NAV is
+  // actually today's published NAV or yesterday's carry-over
+  function todayISTNavDate() {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric',
+    }).format(new Date()).replace(/\//g, '-');
+  }
+
   // funds: array of { id, name, amc, cat } from fp_funds
   // returns: Promise<{ [fundId]: { price, change, dir } }>
   async function fetchNAVs(funds) {
@@ -40,7 +48,14 @@
       const cacheKey = 'fp_nav_' + code;
       try {
         const cached = JSON.parse(localStorage.getItem(cacheKey));
-        if (cached && cached.day === todayIST()) { result[f.id] = cached; return; }
+        // Once we have TODAY'S published NAV it can't change — cache all day.
+        // A carry-over NAV (yesterday's, cached before the ~9:30 PM publish)
+        // only lives 1 hour, so the evening update actually shows up.
+        if (cached && cached.day === todayIST()) {
+          const isTodaysNav = cached.navDate === todayISTNavDate();
+          const recentEnough = (Date.now() - (cached.fetchedAt || 0)) < 3600000;
+          if (isTodaysNav || recentEnough) { result[f.id] = cached; return; }
+        }
       } catch (e) {}
 
       try {
@@ -59,6 +74,7 @@
           dir:     pct >= 0 ? 'up' : 'down',
           day:     todayIST(),
           navDate: data[0].date,
+          fetchedAt: Date.now(),
         };
         if (data.length > 5) {
           const w = parseFloat(data[5].nav);
@@ -80,16 +96,29 @@
     return result;
   }
 
-  // Returns the full AMFI fund list, cached 24h in localStorage. Returns null if fetch fails.
+  // Returns the searchable AMFI fund list, cached 24h. Returns null if fetch fails.
+  // The raw list is ~40k schemes / several MB — that blows the localStorage quota,
+  // the setItem silently fails, and every page load re-downloads the whole thing.
+  // So we keep only Direct+Growth schemes (the only ones searchFunds ever shows),
+  // slim each row to { schemeCode, schemeName }, and hold an in-memory copy as a
+  // fallback for browsers where even the slim list won't fit.
   let _fundListInflight = null;
+  let _fundListMemory   = null;
+  let _fundListMemoryTs = 0;
 
   async function getFundList() {
+    if (_fundListMemory && (Date.now() - _fundListMemoryTs) < 86400000) return _fundListMemory;
+
     try {
       const ts  = parseInt(localStorage.getItem('fp_fund_list_ts') || '0', 10);
       const age = Date.now() - ts;
       if (age < 86400000) {
         const cached = JSON.parse(localStorage.getItem('fp_fund_list'));
-        if (cached && cached.length) return cached;
+        if (cached && cached.length) {
+          _fundListMemory   = cached;
+          _fundListMemoryTs = ts;
+          return cached;
+        }
       }
     } catch (e) {}
 
@@ -102,11 +131,19 @@
         const res = await fetch(MFAPI, { signal: controller.signal });
         clearTimeout(timer);
         if (!res.ok) return null;
-        const list = await res.json();
+        const raw  = await res.json();
+        const list = raw
+          .filter(function (f) {
+            const n = (f.schemeName || '').toLowerCase();
+            return n.indexOf('direct') !== -1 && n.indexOf('growth') !== -1;
+          })
+          .map(function (f) { return { schemeCode: f.schemeCode, schemeName: f.schemeName }; });
+        _fundListMemory   = list;
+        _fundListMemoryTs = Date.now();
         try {
           localStorage.setItem('fp_fund_list', JSON.stringify(list));
-          localStorage.setItem('fp_fund_list_ts', String(Date.now()));
-        } catch (e) {}
+          localStorage.setItem('fp_fund_list_ts', String(_fundListMemoryTs));
+        } catch (e) { /* quota exceeded — in-memory copy still serves this session */ }
         return list;
       } catch (e) { return null; }
       finally { _fundListInflight = null; }

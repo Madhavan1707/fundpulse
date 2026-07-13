@@ -665,8 +665,16 @@ let addedFunds = [];
 let skipped = false;
 let liveNews = [];
 let activeFilter = 'all';
-let readArticles = new Set();
-let bookmarkedArticles = new Set();
+// read/bookmark state survives reloads via localStorage
+function loadIdSet(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); }
+  catch (e) { return new Set(); }
+}
+function saveIdSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set].slice(-200))); } catch (e) {}
+}
+let readArticles = loadIdSet('fp_read');
+let bookmarkedArticles = loadIdSet('fp_bookmarks');
 let pendingRemoveFundId = null;
 let activeSheetArticleId = null;
 let _searchResults = [];
@@ -688,7 +696,7 @@ const FUNDS = [
 
 // ── INIT ──
 function init() {
-  userName = localStorage.getItem('fp_username') || 'Madhavan';
+  userName = localStorage.getItem('fp_username') || 'there';
   updateNameDisplays();
   setFeedGreeting();
   setFeedDate();
@@ -849,6 +857,11 @@ function removeFundInstant(id) {
     chip.style.opacity = '0';
     chip.style.transform = 'translateX(10px)';
   }
+  // addFund already wrote this fund to Supabase — without this delete it
+  // reappears on the next boot's watchlist sync. Onboarding is reachable from
+  // inside the app ("+ Add"), so the fund may also carry an alert config.
+  removeFromWatchlist(id);
+  removeAlertConfigFor(id);
   setTimeout(() => {
     addedFunds = addedFunds.filter(f => f.id !== id);
     localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
@@ -880,6 +893,15 @@ function closeConfirm() {
   document.getElementById('confirm-overlay').classList.remove('open');
 }
 
+function removeAlertConfigFor(fundId) {
+  // Deletion Consent Rule: removing a fund also removes its alert config
+  try {
+    const cfg = JSON.parse(localStorage.getItem('fp_alert_config') || '{}');
+    if (cfg[fundId]) { delete cfg[fundId]; localStorage.setItem('fp_alert_config', JSON.stringify(cfg)); }
+  } catch (e) {}
+  deleteAlertConfig(fundId);
+}
+
 function confirmRemove() {
   if (!pendingRemoveFundId) return;
   const removingId = pendingRemoveFundId;
@@ -889,6 +911,7 @@ function confirmRemove() {
   localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
   // also remove from Supabase in background
   removeFromWatchlist(removingId);
+  removeAlertConfigFor(removingId);
   updateAddedList();
   updateContinueBtn();
   buildFeedFilters();
@@ -1064,6 +1087,7 @@ function bookmarkArticle(id) {
     setTimeout(() => card.classList.remove('bookmarked-anim'), 400);
     if (btn) { btn.classList.add('active'); btn.title = 'Remove bookmark'; }
   }
+  saveIdSet('fp_bookmarks', bookmarkedArticles);
   if (activeSheetArticleId === id) updateSheetBookmarkBtn();
 }
 
@@ -1074,6 +1098,7 @@ function openSheet(articleId) {
   activeSheetArticleId = articleId;
 
   readArticles.add(articleId);
+  saveIdSet('fp_read', readArticles);
   const card = document.getElementById(`card-${articleId}`);
   if (card) card.classList.add('read');
 
@@ -1126,7 +1151,8 @@ feedBody.addEventListener('touchend', () => {
     const ptr = document.getElementById('ptr-indicator');
     ptr.classList.add('show');
     setLastUpdated();
-    setTimeout(() => { ptr.classList.remove('show'); renderNews(activeFilter); }, 1400);
+    // actually refetch from Supabase, not just re-render local data
+    setTimeout(() => { ptr.classList.remove('show'); loadFeed(); }, 800);
   }
 });
 
@@ -1199,11 +1225,6 @@ async function boot() {
     }
   }
   if (window.prefetchFundList) prefetchFundList();
-}
-
-// testing fallback
-if (!localStorage.getItem('fp_username')) {
-  localStorage.setItem('fp_username', 'Madhavan');
 }
 
 // wait for supabase.js to signal ready, then boot

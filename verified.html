@@ -246,11 +246,12 @@ async function resendOTP() {
   }, 30000);
 }
 
-function showSuccessScreen(session) {
+async function showSuccessScreen(session) {
   if (session) {
     const name = session.user?.user_metadata?.full_name || 'there';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-    sb.from('profiles').update({ full_name: name }).eq('id', session.user.id);
+    // Supabase query builders are lazy — without await the request never fires
+    await sb.from('profiles').upsert({ id: session.user.id, full_name: name }, { onConflict: 'id' });
     document.getElementById('msg').textContent =
       'Your email is confirmed! You can now sign in — go back to FundPulse and reload the page, or open it on this device.';
     document.getElementById('continue-btn').style.display = 'inline-block';
