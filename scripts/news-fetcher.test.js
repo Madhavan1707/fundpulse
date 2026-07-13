@@ -85,3 +85,21 @@ test('formatArticle: handles malformed pubDate without throwing', () => {
   const result = formatArticle(raw, SAMPLE_FUNDS);
   assert.equal(result.published_at, null);
 });
+
+test('matchFundTags: lone brand word does not tag bank/corporate stories', () => {
+  // "HDFC" appears but nothing fund-related — HDFC Bank news must not be
+  // tagged as HDFC Flexi Cap news (regression: single-word name match)
+  const tags = matchFundTags('HDFC Bank trims workforce amid tech, AI ramp up', 'Banking layoffs', SAMPLE_FUNDS);
+  assert.deepEqual(tags, []);
+});
+
+test('matchFundTags: lone brand word + fund context still tags', () => {
+  const tags = matchFundTags('HDFC flexi strategies gain favour', '', SAMPLE_FUNDS);
+  assert.ok(tags.includes('hdfc-flexi'));
+});
+
+test('matchFundTags: support word matches whole words only', () => {
+  // "mcap" contains "cap" as a substring — must not count as fund context
+  const tags = matchFundTags('HDFC leads market mcap gains this week', '', SAMPLE_FUNDS);
+  assert.deepEqual(tags, []);
+});

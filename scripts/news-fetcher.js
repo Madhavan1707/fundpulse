@@ -21,8 +21,15 @@ function matchFundTags(title, description, funds) {
     .filter(f => {
       // Name match: every distinctive word must appear — a lone "axis" must not
       // tag Axis Bluechip Fund from an Axis Bank story.
-      const words = (f.fund_name || '').toLowerCase().split(' ').filter(w => w.length > 2 && !STOP_WORDS.has(w));
-      const nameMatch = words.length > 0 && words.every(w => text.includes(w));
+      const allWords = (f.fund_name || '').toLowerCase().split(' ').filter(w => w.length > 2);
+      const words = allWords.filter(w => !STOP_WORDS.has(w));
+      // A single distinctive word ("hdfc") is not enough on its own — it tags
+      // every HDFC Bank story. Require one of the fund's own generic words
+      // ("flexi", "cap", "fund", "nifty"…) to appear too, as a whole word.
+      const supportWords = allWords.filter(w => STOP_WORDS.has(w));
+      const hasSupport = supportWords.some(w => new RegExp('\\b' + w + 's?\\b').test(text));
+      const nameMatch = words.length > 0 && words.every(w => text.includes(w)) &&
+        (words.length >= 2 || hasSupport);
       // AMC match: first two significant words must both appear ("axis" + "mutual").
       const amcWords = (f.fund_amc || '').toLowerCase().split(' ').filter(w => w.length > 2).slice(0, 2);
       const amcMatch = amcWords.length > 0 && amcWords.every(w => text.includes(w));

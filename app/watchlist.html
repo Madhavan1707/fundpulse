@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="dark"/>
   <title>FundPulse — Watchlist</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -10,6 +11,7 @@
   <script src="supabase.js"></script>
   <script src="mfapi.js"></script>
   <style>
+    @view-transition { navigation: auto; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --navy:       #070c18;
@@ -823,19 +825,15 @@ function loadLiveNAVs() {
   }).catch(function () {});
 }
 
+// render immediately from localStorage — runs at parse time so navigating
+// here never shows an empty shell while the auth SDK loads
+init();
+initProfileDrawer();
+
 // ── BOOT ──
 async function boot() {
   const session = await getSession();
   if (!session) { window.location.href = '../index.html'; return; }
-
-  // load from localStorage first — instant render
-  const savedFunds = localStorage.getItem('fp_funds');
-  if (savedFunds) { try { funds = JSON.parse(savedFunds); } catch(e) {} }
-  const savedConfig = localStorage.getItem('fp_alert_config');
-  if (savedConfig) { try { alertConfig = JSON.parse(savedConfig); } catch(e) {} }
-
-  init(); // render immediately
-  initProfileDrawer();
 
   // sync with Supabase in background
   const rows = await fetchWatchlist();

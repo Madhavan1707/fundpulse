@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="dark"/>
   <title>FundPulse — News Feed</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -11,6 +12,8 @@
   <script src="mfapi.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* smooth cross-fade between app pages (Chromium/Safari; harmless elsewhere) */
+    @view-transition { navigation: auto; }
     :root {
       --navy:       #070c18;
       --navy-2:     #0b1220;
@@ -742,15 +745,42 @@ function relativeTime(pubDate) {
   return `${d} days ago`;
 }
 
+const NEWS_COLS = 'article_id, title, description, source_name, url, published_at, fund_tags';
+
 async function loadNewsFromSupabase() {
   try {
-    const { data, error } = await window._supabase
-      .from('news')
-      .select('article_id, title, description, source_name, url, published_at, fund_tags')
-      .order('published_at', { ascending: false })
-      .limit(50);
-    if (error) { console.error('fetchNews:', error); return []; }
-    return data || [];
+    // Two queries: the newest 50 overall (the "All" tab is a firehose — 50
+    // covers only ~half a day), PLUS every article tagged with one of the
+    // user's funds across the whole 7-day retention window. Without the
+    // second query, fund tabs filter the same half-day slice and usually
+    // come up empty even though older tagged articles exist.
+    const fundIds = addedFunds.map(f => f.id);
+    const queries = [
+      window._supabase.from('news').select(NEWS_COLS)
+        .order('published_at', { ascending: false }).limit(50),
+    ];
+    if (fundIds.length) {
+      // limit 100: one noisy fund can produce 50+ tagged articles a week and
+      // would crowd quieter funds out of a smaller window
+      queries.push(
+        window._supabase.from('news').select(NEWS_COLS)
+          .overlaps('fund_tags', fundIds)
+          .order('published_at', { ascending: false }).limit(100)
+      );
+    }
+    const results = await Promise.all(queries);
+    const seen = new Set();
+    const merged = [];
+    results.forEach(r => {
+      if (r.error) { console.error('fetchNews:', r.error); return; }
+      (r.data || []).forEach(a => {
+        if (seen.has(a.article_id)) return;
+        seen.add(a.article_id);
+        merged.push(a);
+      });
+    });
+    merged.sort((a, b) => new Date(b.published_at || 0) - new Date(a.published_at || 0));
+    return merged;
   } catch (e) { console.error('fetchNews:', e); return []; }
 }
 
@@ -914,6 +944,9 @@ function confirmRemove() {
   removeAlertConfigFor(removingId);
   updateAddedList();
   updateContinueBtn();
+  // if the removed fund's tab was active, fall back to All — the rebuilt
+  // chip bar highlights All, so the rendered list must match it
+  if (activeFilter === removingId) activeFilter = 'all';
   buildFeedFilters();
   renderNews(activeFilter);
 }
@@ -976,7 +1009,7 @@ function switchTab(tab, el) {
 // ── FEED ──
 function buildFeedFilters() {
   const filtersEl = document.getElementById('feed-filters');
-  filtersEl.innerHTML = `<div class="filter-chip active" data-filter="all" onclick="filterFeed('all',this)">All</div>`;
+  filtersEl.innerHTML = `<div class="filter-chip" data-filter="all" onclick="filterFeed('all',this)">All</div>`;
   addedFunds.forEach(f => {
     filtersEl.innerHTML += `
       <div class="filter-chip removable" data-filter="${f.id}" onclick="filterFeed('${f.id}',this)">
@@ -985,12 +1018,23 @@ function buildFeedFilters() {
       </div>`;
   });
   filtersEl.innerHTML += `<button class="add-funds-chip" onclick="showOnboard()">＋ Add</button>`;
+  // highlight whichever filter is actually active (falls back to All)
+  const activeChip = filtersEl.querySelector(`.filter-chip[data-filter="${activeFilter}"]`)
+                  || filtersEl.querySelector('.filter-chip[data-filter="all"]');
+  if (activeChip) activeChip.classList.add('active');
   document.getElementById('all-news-banner').style.display = skipped ? 'flex' : 'none';
 }
 
 async function loadFeed() {
   document.getElementById('shimmer-list').style.display = 'flex';
   document.getElementById('news-list').style.display    = 'none';
+
+  // the feed screen can be visible before the auth SDK finishes loading —
+  // keep the shimmer up and retry once it's ready
+  if (!window._supabase) {
+    window.addEventListener('supabase_ready', () => loadFeed(), { once: true });
+    return;
+  }
 
   liveNews = await loadNewsFromSupabase();
 
@@ -999,16 +1043,6 @@ async function loadFeed() {
   renderNews(activeFilter);
 
 }
-
-function askRemoveFundFromFeed(event, id) {
-  event.stopPropagation(); // prevent filter chip click
-  pendingRemoveFundId = id;
-  const fund = addedFunds.find(f => f.id === id);
-  if (!fund) return;
-  document.getElementById('confirm-fund-name').textContent = fund.name;
-  document.getElementById('confirm-overlay').classList.add('open');
-}
-
 
 function filterFeed(filterId, el) {
   activeFilter = filterId;
@@ -1035,15 +1069,18 @@ function renderNews(filterId) {
     list.innerHTML = `<div style="text-align:center;padding:48px 20px;">
       <div style="font-size:2rem;margin-bottom:12px;">📭</div>
       <div style="font-family:'Outfit',sans-serif;font-weight:700;font-size:1rem;margin-bottom:8px;">No recent news</div>
-      <div style="font-size:.8rem;color:var(--muted);">No news found in the last 48 hours for this fund. We're watching.</div>
+      <div style="font-size:.8rem;color:var(--muted);">No news found in the last 7 days for this fund. We're watching.</div>
     </div>`;
     return;
   }
 
   list.innerHTML = articles.map((n, i) => {
-    const primaryTag = (n.fund_tags || [])[0];
-    const fund = FUNDS.find(f => f.id === primaryTag);
-    const tagColor = fund ? fund.color : 'tag-all';
+    // Prefer a tag that matches one of the user's own funds, so the card
+    // label names their fund (not "General") for funds added via live search.
+    const tags = n.fund_tags || [];
+    const primaryTag = tags.find(t => addedFunds.some(f => f.id === t)) || tags[0];
+    const fund = FUNDS.find(f => f.id === primaryTag) || addedFunds.find(f => f.id === primaryTag);
+    const tagColor = (fund && fund.color) || (fund ? 'tag-blue' : 'tag-all');
     const tagLabel = fund ? fund.name.split(' ').slice(0, 2).join(' ') : 'General';
     const isRead       = readArticles.has(n.article_id);
     const isBookmarked = bookmarkedArticles.has(n.article_id);
@@ -1140,20 +1177,25 @@ function closeSheet() {
 }
 
 // ── PULL TO REFRESH ──
-let ptrStart = 0, ptrActive = false;
+let ptrStart = 0, ptrDelta = 0, ptrActive = false;
 const feedBody = document.getElementById('feed-body');
 feedBody.addEventListener('touchstart', e => {
-  if (feedBody.scrollTop === 0) { ptrStart = e.touches[0].clientY; ptrActive = true; }
+  if (feedBody.scrollTop === 0) { ptrStart = e.touches[0].clientY; ptrDelta = 0; ptrActive = true; }
+}, { passive: true });
+feedBody.addEventListener('touchmove', e => {
+  if (ptrActive) ptrDelta = e.touches[0].clientY - ptrStart;
 }, { passive: true });
 feedBody.addEventListener('touchend', () => {
-  if (ptrActive) {
-    ptrActive = false;
-    const ptr = document.getElementById('ptr-indicator');
-    ptr.classList.add('show');
-    setLastUpdated();
-    // actually refetch from Supabase, not just re-render local data
-    setTimeout(() => { ptr.classList.remove('show'); loadFeed(); }, 800);
-  }
+  if (!ptrActive) return;
+  ptrActive = false;
+  // only refresh on a deliberate downward pull — a plain tap used to
+  // trigger this too, re-rendering the whole feed on every card tap
+  if (ptrDelta < 70) return;
+  const ptr = document.getElementById('ptr-indicator');
+  ptr.classList.add('show');
+  setLastUpdated();
+  // actually refetch from Supabase, not just re-render local data
+  setTimeout(() => { ptr.classList.remove('show'); loadFeed(); }, 800);
 });
 
 // ── KEYBOARD ──
@@ -1161,35 +1203,29 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeSheet(); closeConfirm(); }
 });
 
-// ── BOOT ──
+// ── INSTANT RENDER (runs at parse time, no SDK needed) ──
+// The auth SDK takes 100-300ms to load; deciding the screen inside boot()
+// used to flash the onboarding screen on every navigation to the feed.
+// Everything here comes from localStorage, so it runs synchronously.
+(function instantRender() {
+  userName = localStorage.getItem('fp_username') || 'there';
+  try { addedFunds = JSON.parse(localStorage.getItem('fp_funds') || '[]'); } catch (e) { addedFunds = []; }
+  const hasSetupBefore = localStorage.getItem('fp_setup_done') === '1';
+  init();
+  if (addedFunds.length > 0 || hasSetupBefore) {
+    skipped = hasSetupBefore && addedFunds.length === 0;
+    showScreen('screen-feed');
+    buildFeedFilters();
+    loadFeed(); // shows shimmer; waits for the SDK internally
+  }
+  // else: show onboarding (default screen is already active)
+})();
+
+// ── BOOT (runs once the auth SDK is ready) ──
 async function boot() {
   // check auth — redirect if not logged in
   const session = await getSession();
   if (!session) { window.location.href = '../index.html'; return; }
-
-  // get name immediately from localStorage for fast render
-  const cachedName = localStorage.getItem('fp_username') || 'there';
-  userName = cachedName;
-
-  // load funds from localStorage first — instant, no flicker
-  const saved = localStorage.getItem('fp_funds');
-  const hasSetupBefore = localStorage.getItem('fp_setup_done') === '1';
-
-  if (saved) {
-    try { addedFunds = JSON.parse(saved); } catch(e) { addedFunds = []; }
-  }
-
-  // show the right screen immediately based on local data
-  init();
-
-  if (addedFunds.length > 0 || hasSetupBefore) {
-    // user has funds or has been through onboarding before — go to feed
-    skipped = hasSetupBefore && addedFunds.length === 0;
-    showScreen('screen-feed');
-    buildFeedFilters();
-    loadFeed();
-  }
-  // else: show onboarding (default screen is already active)
 
   // sync with Supabase in background — update name and funds silently
   const user = await getUser();
@@ -1209,18 +1245,23 @@ async function boot() {
     // sync funds from Supabase in background
     const rows = await fetchWatchlist();
     if (rows.length) {
+      const prevIds = addedFunds.map(f => f.id).sort().join(',');
       addedFunds = rows.map(r => ({
         id: r.fund_id, name: r.fund_name, amc: r.fund_amc, cat: r.fund_cat
       }));
       localStorage.setItem('fp_funds', JSON.stringify(addedFunds));
       localStorage.setItem('fp_setup_done', '1');
+      const newIds = addedFunds.map(f => f.id).sort().join(',');
       // if we showed onboarding but Supabase has funds, switch to feed
       if (!document.getElementById('screen-feed').classList.contains('active')) {
         showScreen('screen-feed');
         buildFeedFilters();
         loadFeed();
-      } else {
+      } else if (newIds !== prevIds) {
+        // fund set changed — refetch so tagged news for synced funds appears
+        if (!addedFunds.some(f => f.id === activeFilter)) activeFilter = 'all';
         buildFeedFilters();
+        loadFeed();
       }
     }
   }

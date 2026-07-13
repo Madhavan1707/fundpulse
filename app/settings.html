@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="dark"/>
   <title>FundPulse — Settings</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
   <script src="supabase.js"></script>
   <style>
+    @view-transition { navigation: auto; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --navy: #070c18; --navy-2: #0b1220; --navy-3: #0f1a2e; --navy-4: #142038;
@@ -363,19 +365,21 @@ function switchTab(tab, el) {
   if (tab !== 'settings') window.location.href = paths[tab];
 }
 
-async function boot() {
-  const session = await getSession();
-  if (!session) { window.location.href = '../index.html'; return; }
-
+// render immediately from localStorage — runs at parse time so navigating
+// here never flashes default form values while the auth SDK loads
+(function instantRender() {
   const initial = (localStorage.getItem('fp_username') || 'U').charAt(0).toUpperCase();
   document.getElementById('header-avatar').textContent = initial;
-
   try {
     const cached = JSON.parse(localStorage.getItem('fp_settings'));
     if (cached) { _settings = cached; applySettingsToForm(cached); }
   } catch (e) {}
-
   initProfileDrawer();
+})();
+
+async function boot() {
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
 
   const hash = location.hash.replace('#', '');
   if (hash) {

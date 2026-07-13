@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="color-scheme" content="dark"/>
   <title>FundPulse — Profile</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet"/>
   <script src="supabase.js"></script>
   <style>
+    @view-transition { navigation: auto; }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --navy: #070c18; --navy-2: #0b1220; --navy-3: #0f1a2e; --navy-4: #142038;
@@ -186,21 +188,24 @@ function switchTab(tab) {
   window.location.href = paths[tab];
 }
 
-async function boot() {
-  const session = await getSession();
-  if (!session) { window.location.href = '../index.html'; return; }
-
+// render immediately from localStorage — runs at parse time so navigating
+// here never flashes empty fields while the auth SDK loads
+(function instantRender() {
   const name  = localStorage.getItem('fp_username') || '';
   const email = localStorage.getItem('fp_email')    || '';
-
   document.getElementById('name-input').value   = name;
   document.getElementById('email-input').value  = email;
   const initial = name.charAt(0).toUpperCase() || '?';
   document.getElementById('profile-avatar').textContent = initial;
   document.getElementById('header-avatar').textContent  = initial;
-
   initProfileDrawer();
+})();
 
+async function boot() {
+  const session = await getSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  const name = localStorage.getItem('fp_username') || '';
   const profile = await fetchProfile();
   if (profile?.full_name && profile.full_name !== name) {
     localStorage.setItem('fp_username', profile.full_name);
