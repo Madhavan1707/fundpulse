@@ -386,7 +386,7 @@
 
 <script>
 // ── STATE ──
-const userName   = localStorage.getItem('fp_username') || 'Madhavan';
+const userName   = localStorage.getItem('fp_username') || 'there';
 let addedFunds = JSON.parse(localStorage.getItem('fp_funds') || '[]');
 
 // alert config per fund: { fundId: { drop:{on,val}, rise:{on,val}, manager:{on}, channels:[] } }
@@ -412,18 +412,27 @@ const FUND_COLORS = {
   'motilal-mid':{ bg:'rgba(0,212,126,.1)',   icon:'🎯' },
 };
 
-// ── DEMO HISTORY (last 5, max 7 days old) ──
-const ALL_HISTORY = [
-  { type:'down',   val:'3.2%', fund:'SBI PSU Direct Fund',       time:'Today, 9:42 PM',      channel:'email',    daysAgo:0 },
-  { type:'up',     val:'2.1%', fund:'Parag Parikh Flexi Cap',    time:'Yesterday, 9:55 PM',  channel:'whatsapp', daysAgo:1 },
-  { type:'change', val:null,   fund:'Axis Bluechip Fund',         time:'2 days ago, 11:10 AM',channel:'sms',      daysAgo:2 },
-  { type:'down',   val:'1.8%', fund:'Quant Small Cap Fund',       time:'3 days ago, 9:38 PM', channel:'email',    daysAgo:3 },
-  { type:'up',     val:'3.4%', fund:'ICICI Pru Technology Fund',  time:'3 days ago, 9:51 PM', channel:'whatsapp', daysAgo:3 },
-  { type:'down',   val:'2.1%', fund:'Nippon India Small Cap',     time:'5 days ago, 9:44 PM', channel:'email',    daysAgo:5 },
-  { type:'up',     val:'1.1%', fund:'HDFC Nifty 50 Index Fund',   time:'6 days ago, 9:30 PM', channel:'sms',      daysAgo:6 },
-];
-const RECENT_HISTORY = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(0,5);
-const OLDER_HISTORY  = ALL_HISTORY.filter(h => h.daysAgo <= 7).slice(5);
+// ── REAL ALERT HISTORY (from alert_log via supabase.js) ──
+let alertHistory = [];   // rows: { fund_id, fund_name, alert_type, pct_change, channel, sent_at }
+
+function historyTimeLabel(sentAt) {
+  const d = new Date(sentAt);
+  if (isNaN(d)) return '';
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
+
+function toHistoryItem(row) {
+  return {
+    type:    row.alert_type === 'drop' ? 'down' : 'up',
+    val:     row.pct_change != null ? Math.abs(row.pct_change).toFixed(2) + '%' : '',
+    fund:    row.fund_name || row.fund_id,
+    time:    historyTimeLabel(row.sent_at),
+    channel: row.channel || 'email',
+  };
+}
 
 // ── INIT ──
 // Reads current defaults from fp_settings and:
@@ -506,20 +515,28 @@ function render() {
       </div>`;
   }
 
-  // HISTORY SECTION (only if alerts exist)
-  if (anyAlertOn && RECENT_HISTORY.length) {
+  // HISTORY SECTION — real alerts the engine actually sent
+  if (alertHistory.length) {
+    const recent = alertHistory.slice(0, 5).map(toHistoryItem);
+    const older  = alertHistory.slice(5).map(toHistoryItem);
     html += `<span class="section-lbl fade-in">Recent Alerts</span>`;
     html += `<div class="history-list fade-in">`;
-    html += RECENT_HISTORY.map(h => historyItemHTML(h)).join('');
+    html += recent.map(h => historyItemHTML(h)).join('');
     html += `</div>`;
-    if (OLDER_HISTORY.length) {
+    if (older.length) {
       html += `<div class="see-older" onclick="toggleOlder()">${showingOlder ? '▲ Hide older alerts' : '▾ See older alerts'}</div>`;
       if (showingOlder) {
         html += `<div class="history-list fade-in" style="margin-top:4px;">`;
-        html += OLDER_HISTORY.map(h => historyItemHTML(h)).join('');
+        html += older.map(h => historyItemHTML(h)).join('');
         html += `</div>`;
       }
     }
+  } else if (anyAlertOn) {
+    html += `<span class="section-lbl fade-in">Recent Alerts</span>`;
+    html += `
+      <div class="no-alerts-banner fade-in" style="margin-bottom:16px;">
+        No alerts sent yet. We check unit prices every evening after they're published — you'll see every alert we send listed here.
+      </div>`;
   }
 
   // FUND ALERT CARDS
@@ -654,7 +671,7 @@ function fundCardHTML(fund, idx) {
 
           <div class="fac-divider"></div>
 
-          <!-- CHANNEL SELECTOR -->
+          <!-- CHANNEL SELECTOR — only email is live; WhatsApp/SMS ship in a later phase -->
           <div>
             <div class="channel-label">Notify me via</div>
             <div class="channel-pills">
@@ -662,13 +679,13 @@ function fundCardHTML(fund, idx) {
                 onclick="toggleChannel('${fund.id}','email')">
                 <span class="ch-pill-icon">✉️</span> Email
               </div>
-              <div class="ch-pill ${cfg.channels.includes('whatsapp')?'selected-whatsapp':''}"
-                onclick="toggleChannel('${fund.id}','whatsapp')">
-                <span class="ch-pill-icon">💬</span> WhatsApp
+              <div class="ch-pill" style="opacity:.45;cursor:default;"
+                onclick="channelComingSoon('WhatsApp')">
+                <span class="ch-pill-icon">💬</span> WhatsApp <span style="font-size:.6rem;font-weight:700;letter-spacing:.05em;color:var(--yellow);margin-left:4px;">SOON</span>
               </div>
-              <div class="ch-pill ${cfg.channels.includes('sms')?'selected-sms':''}"
-                onclick="toggleChannel('${fund.id}','sms')">
-                <span class="ch-pill-icon">📱</span> SMS
+              <div class="ch-pill" style="opacity:.45;cursor:default;"
+                onclick="channelComingSoon('SMS')">
+                <span class="ch-pill-icon">📱</span> SMS <span style="font-size:.6rem;font-weight:700;letter-spacing:.05em;color:var(--yellow);margin-left:4px;">SOON</span>
               </div>
             </div>
           </div>
@@ -735,25 +752,37 @@ function quickPick(fundId, type, val) {
 }
 
 function toggleChannel(fundId, channel) {
+  // Only email is live today — WhatsApp/SMS pills route to channelComingSoon()
+  if (channel !== 'email') { channelComingSoon(channel); return; }
   const cfg = alertConfig[fundId];
-  const idx = cfg.channels.indexOf(channel);
-  if (idx > -1) {
-    // prevent deselecting all channels
-    if (cfg.channels.length === 1) return;
-    cfg.channels.splice(idx, 1);
-  } else {
-    cfg.channels.push(channel);
-  }
+  // email is the only working channel, so it can't be deselected
+  if (cfg.channels.includes('email')) return;
+  cfg.channels = ['email'];
   saveConfig(fundId);
-  // update pills inline without full re-render
   const card = document.getElementById(`fac-${fundId}`);
   if (!card) return;
-  const pills = card.querySelectorAll('.ch-pill');
-  const channels = ['email','whatsapp','sms'];
-  pills.forEach((pill, i) => {
-    const ch = channels[i];
-    pill.className = 'ch-pill' + (cfg.channels.includes(ch) ? ` selected-${ch}` : '');
-  });
+  const pill = card.querySelector('.ch-pill');
+  if (pill) pill.className = 'ch-pill selected-email';
+}
+
+let _csToastTimer = null;
+function channelComingSoon(label) {
+  let toast = document.getElementById('cs-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'cs-toast';
+    toast.style.cssText = `
+      position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+      background:#0f1a2e; border:1px solid rgba(255,255,255,.1);
+      border-radius:100px; padding:10px 20px;
+      font-size:.78rem; color:#7a8fb0; z-index:800; white-space:nowrap;
+      opacity:0; transition:opacity .25s;`;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = `${label} alerts are coming soon — you'll get email alerts for now`;
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  clearTimeout(_csToastTimer);
+  _csToastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
 }
 
 function updateStatusBadge(fundId) {
@@ -819,6 +848,10 @@ async function boot() {
     localStorage.setItem('fp_alert_config', JSON.stringify(alertConfig));
     render(); // re-render silently with fresh data
   }
+
+  // real alert history (empty until the engine has sent something)
+  alertHistory = await fetchAlertHistory(20);
+  if (alertHistory.length) render();
 }
 
 // wait for supabase.js to signal ready, then boot

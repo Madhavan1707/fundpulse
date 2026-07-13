@@ -163,9 +163,13 @@ function initProfileDrawer() {
 
   // inject drawer HTML once
   if (!document.getElementById('fp-drawer-overlay')) {
-    const name  = localStorage.getItem('fp_username') || 'there';
-    const email = localStorage.getItem('fp_email')    || '';
-    const initial = name.charAt(0).toUpperCase();
+    const escapeHtml = (s) => s.replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+    const rawName = localStorage.getItem('fp_username') || 'there';
+    const name    = escapeHtml(rawName);
+    const email   = escapeHtml(localStorage.getItem('fp_email') || '');
+    const initial = escapeHtml(rawName.charAt(0).toUpperCase());
 
     const overlay = document.createElement('div');
     overlay.className = 'fp-drawer-overlay';
@@ -365,6 +369,19 @@ async function deleteAlertConfig(fundId) {
     .eq('user_id', user.id)
     .eq('fund_id', fundId);
   if (error) console.error('deleteAlertConfig:', error);
+}
+
+// ── ALERT HISTORY ──
+// Real alerts sent by the engine (alert_log table, RLS-scoped to own rows).
+// Returns [] if the table doesn't exist yet so screens degrade gracefully.
+async function fetchAlertHistory(limit) {
+  const { data, error } = await window._supabase
+    .from('alert_log')
+    .select('fund_id, fund_name, alert_type, pct_change, channel, sent_at')
+    .order('sent_at', { ascending: false })
+    .limit(limit || 20);
+  if (error) { console.warn('fetchAlertHistory:', error.message); return []; }
+  return data || [];
 }
 
 // ── PROFILE HELPER ──
