@@ -1,5 +1,14 @@
 'use strict';
 
+// Escape values that originate from user/watchlist data before they go into the
+// email HTML. Fund names come from a user's own watchlist, but never interpolate
+// unescaped data into markup.
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function buildEmail({ fundName, fundCat, type, todayNav, pctChange, threshold, appUrl }) {
   const isDown  = type === 'drop';
   if (!Number.isFinite(todayNav) || !Number.isFinite(pctChange)) {
@@ -18,7 +27,7 @@ function buildEmail({ fundName, fundCat, type, todayNav, pctChange, threshold, a
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>${subject}</title>
+  <title>${escHtml(subject)}</title>
 </head>
 <body style="margin:0;padding:0;background:#070c18;font-family:'Helvetica Neue',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#070c18;min-height:100vh;">
@@ -35,8 +44,8 @@ function buildEmail({ fundName, fundCat, type, todayNav, pctChange, threshold, a
 
         <p style="margin:0 0 16px;font-size:1rem;font-weight:700;color:#edf2ff;">${icon} Price Alert</p>
 
-        <p style="margin:0 0 4px;font-size:1.3rem;font-weight:800;color:#edf2ff;letter-spacing:-0.02em;">${fundName}</p>
-        <p style="margin:0 0 24px;font-size:0.75rem;color:#7a8fb0;">${fundCat || 'Mutual Fund'}</p>
+        <p style="margin:0 0 4px;font-size:1.3rem;font-weight:800;color:#edf2ff;letter-spacing:-0.02em;">${escHtml(fundName)}</p>
+        <p style="margin:0 0 24px;font-size:0.75rem;color:#7a8fb0;">${escHtml(fundCat || 'Mutual Fund')}</p>
 
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
           <tr>

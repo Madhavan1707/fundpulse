@@ -567,6 +567,17 @@
       .screen { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
       .article-sheet, .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
     }
+    /* desktop: wider column, nav docked under the header */
+    @media(min-width: 900px) {
+      .screen { max-width: 680px; border-left: 1px solid var(--cb); border-right: 1px solid var(--cb); }
+      .app-header { order: -2; }
+      .bottom-nav { order: -1; justify-content: center; border-top: none; border-bottom: 1px solid var(--cb); }
+      .nav-item { flex: 0 0 auto; flex-direction: row; gap: 7px; padding: 13px 22px; }
+      .nav-item.active { box-shadow: inset 0 -2px 0 var(--blue); }
+      .nav-label { font-size: .72rem; }
+      .nav-dot { display: none; }
+      .article-sheet { max-width: 560px; }
+    }
   </style>
 </head>
 <body>
@@ -894,8 +905,8 @@ function renderSearchResults(matches) {
       return '<div class="search-result-item ' + (isAdded ? 'is-added' : '') + '"' +
         (isAdded ? '' : ' onclick="addFund(\'' + f.id + '\')"') + '>' +
         '<div>' +
-        '<div class="sri-name">' + f.name + '</div>' +
-        '<div class="sri-meta">' + meta + '</div>' +
+        '<div class="sri-name">' + esc(f.name) + '</div>' +
+        '<div class="sri-meta">' + esc(meta) + '</div>' +
         '</div>' +
         (isAdded ? '<div class="sri-added-check">✓</div>' : '') +
         '</div>';
@@ -944,7 +955,7 @@ function updateAddedList() {
     <div class="added-fund-chip" id="chip-${f.id}">
       <div class="afc-left">
         <div class="afc-check">✓</div>
-        <div><div class="afc-name">${f.name}</div><div class="afc-cat">${f.cat}</div></div>
+        <div><div class="afc-name">${esc(f.name)}</div><div class="afc-cat">${esc(f.cat)}</div></div>
       </div>
       <button class="afc-remove" onclick="removeFundInstant('${f.id}')" title="Remove">✕</button>
     </div>`).join('');
@@ -1102,7 +1113,7 @@ function buildFeedFilters() {
   addedFunds.forEach(f => {
     filtersEl.innerHTML += `
       <div class="filter-chip removable" data-filter="${f.id}" onclick="filterFeed('${f.id}',this)">
-        ${f.name.split(' ').slice(0,2).join(' ')}
+        ${esc(f.name.split(' ').slice(0,2).join(' '))}
         <span class="fc-remove" onclick="askRemoveFundFromFeed(event,'${f.id}')" title="Remove fund">✕</span>
       </div>`;
   });
@@ -1126,7 +1137,7 @@ async function updatePulseCard() {
     const navs = await fetchNAVs(addedFunds);
     let cfg = {};
     try { cfg = JSON.parse(localStorage.getItem('fp_alert_config') || '{}'); } catch (e) {}
-    const short = n => n.split(' ').slice(0, 2).join(' ');
+    const short = n => esc(n.split(' ').slice(0, 2).join(' '));
     const fmt = p => (p >= 0 ? '+' : '') + p.toFixed(2) + '%';
     let biggest = null;
     const crossed = [];

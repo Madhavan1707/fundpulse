@@ -2,6 +2,7 @@
 
 const { buildEmail } = require('./email-template.js');
 const { sendPush } = require('./webpush.js');
+const { createEmailSender } = require('./email-sender.js');
 
 // ── SCHEME MAP (mirrors mfapi.js) ──
 const SCHEME_MAP = {
@@ -230,36 +231,31 @@ async function deletePushSub(supabaseUrl, serviceKey, endpoint) {
   } catch (e) { /* best-effort cleanup */ }
 }
 
-async function sendEmail(to, subject, html, resendKey, fromEmail) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: fromEmail, to, subject, html }),
-  });
-  if (!res.ok) throw new Error(`Resend error for ${to}: ${res.status} ${await res.text()}`);
-  return res.json();
-}
-
 // ── MAIN ──
 
 async function main() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const RESEND_KEY   = process.env.RESEND_API_KEY;
-  const FROM_EMAIL   = process.env.RESEND_FROM_EMAIL;
   const APP_URL      = process.env.APP_URL || 'https://fundpulse-chi.vercel.app';
 
-  if (!SUPABASE_URL || !SERVICE_KEY || !RESEND_KEY || !FROM_EMAIL) {
-    console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM_EMAIL');
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    console.error('Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
     process.exit(1);
   }
+
+  const mailer = createEmailSender(process.env);
+  if (!mailer) {
+    console.error('No email provider configured. Set BREVO_API_KEY + ALERT_FROM_EMAIL (free tier, delivers to any user) or RESEND_API_KEY + RESEND_FROM_EMAIL (needs a verified domain to reach real users).');
+    process.exit(1);
+  }
+  console.log(`Email provider: ${mailer.provider} (from: ${mailer.from})`);
 
   // Push channel is optional: engine runs email-only when VAPID secrets are absent
   const VAPID = (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
     ? {
         publicKey:  process.env.VAPID_PUBLIC_KEY,
         privateKey: process.env.VAPID_PRIVATE_KEY,
-        subject:    process.env.VAPID_SUBJECT || `mailto:${FROM_EMAIL}`,
+        subject:    process.env.VAPID_SUBJECT || `mailto:${mailer.from}`,
       }
     : null;
   if (!VAPID) console.log('Push channel off (VAPID secrets not set) — email only.');
@@ -372,7 +368,7 @@ async function main() {
             threshold,
             appUrl: APP_URL,
           });
-          await sendEmail(email, subject, html, RESEND_KEY, FROM_EMAIL);
+          await mailer.send(email, subject, html);
           console.log(`  ✓ Sent ${type} alert → ${email} (${fundName}: ${nav.pctChange.toFixed(2)}%)`);
           sent++;
           emailOk = true;

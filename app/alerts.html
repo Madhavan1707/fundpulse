@@ -360,6 +360,16 @@
     @media(min-width: 520px) {
       .app-screen { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
     }
+    /* desktop: wider column, nav docked under the header */
+    @media(min-width: 900px) {
+      .app-screen { max-width: 680px; border-left: 1px solid var(--cb); border-right: 1px solid var(--cb); }
+      .app-header { order: -2; }
+      .bottom-nav { order: -1; justify-content: center; border-top: none; border-bottom: 1px solid var(--cb); }
+      .nav-item { flex: 0 0 auto; flex-direction: row; gap: 7px; padding: 13px 22px; }
+      .nav-item.active { box-shadow: inset 0 -2px 0 var(--blue); }
+      .nav-label { font-size: .72rem; }
+      .nav-dot { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -603,6 +613,9 @@ function render() {
   body.innerHTML = html;
 }
 
+// escape any externally-sourced string before it goes into innerHTML
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
 // ── HISTORY ITEM ──
 function historyItemHTML(h) {
   const icons = { down:'📉', up:'📈', change:'👤' };
@@ -618,7 +631,7 @@ function historyItemHTML(h) {
       <div class="hi-icon ${h.type}">${icons[h.type]}</div>
       <div class="hi-body">
         <div class="hi-title">${labels[h.type]}</div>
-        <div class="hi-fund">${h.fund}</div>
+        <div class="hi-fund">${esc(h.fund)}</div>
       </div>
       <span class="hi-channel ${chClass[h.channel]}">${chLabel[h.channel]}</span>
       <div class="hi-time">${h.time.split(',')[0]}</div>
@@ -643,8 +656,8 @@ function fundCardHTML(fund, idx) {
       <div class="fac-header" onclick="toggleFund('${fund.id}')">
         <div class="fac-icon" style="background:${fcolor.bg}; border:1px solid rgba(255,255,255,.08);">${fcolor.icon}</div>
         <div class="fac-info">
-          <div class="fac-name">${fund.name}</div>
-          <div class="fac-meta">${fund.cat} · ${fund.amc}</div>
+          <div class="fac-name">${esc(fund.name)}</div>
+          <div class="fac-meta">${esc(fund.cat)} · ${esc(fund.amc)}</div>
         </div>
         <span class="fac-status ${statusClass}">${statusLabel}</span>
         <span class="fac-chevron">▼</span>

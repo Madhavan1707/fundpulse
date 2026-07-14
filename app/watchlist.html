@@ -422,6 +422,16 @@
       .app-screen    { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
       .confirm-overlay { max-width: 480px; left: 50%; transform: translateX(-50%); right: auto; }
     }
+    /* desktop: wider column, nav docked under the header */
+    @media(min-width: 900px) {
+      .app-screen { max-width: 680px; border-left: 1px solid var(--cb); border-right: 1px solid var(--cb); }
+      .app-header { order: -2; }
+      .bottom-nav { order: -1; justify-content: center; border-top: none; border-bottom: 1px solid var(--cb); }
+      .nav-item { flex: 0 0 auto; flex-direction: row; gap: 7px; padding: 13px 22px; }
+      .nav-item.active { box-shadow: inset 0 -2px 0 var(--blue); }
+      .nav-label { font-size: .72rem; }
+      .nav-dot { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -564,6 +574,9 @@ function toggleDetail(fundId) {
   if (chevron) chevron.classList.toggle('open', isOpen);
 }
 
+// escape any externally-sourced string before it goes into innerHTML
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
 // ── RENDER ──
 function render() {
   const body = document.getElementById('wl-body');
@@ -657,8 +670,8 @@ function render() {
             <div class="fc-top">
               <div class="fc-icon" style="background:rgba(255,255,255,.05);border:1px solid var(--cb);">${meta.icon}</div>
               <div class="fc-title">
-                <div class="fc-name">${f.name}</div>
-                <div class="fc-meta">${f.cat} · ${f.amc}</div>
+                <div class="fc-name">${esc(f.name)}</div>
+                <div class="fc-meta">${esc(f.cat)} · ${esc(f.amc)}</div>
               </div>
               <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
                 <button class="fc-remove" onclick="event.stopPropagation();askRemove('${f.id}')" title="Remove fund">✕</button>
@@ -753,8 +766,8 @@ function wireSearch() {
         return '<div class="search-result-item ' + (already ? 'is-added' : '') + '"' +
           (already ? '' : ' onclick="addFund(\'' + f.id + '\')"') + '>' +
           '<div>' +
-          '<div class="sri-name">' + f.name + '</div>' +
-          '<div class="sri-meta">' + meta + '</div>' +
+          '<div class="sri-name">' + esc(f.name) + '</div>' +
+          '<div class="sri-meta">' + esc(meta) + '</div>' +
           '</div>' +
           (already ? '<div class="sri-check">✓</div>' : '') +
           '</div>';

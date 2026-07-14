@@ -19,6 +19,8 @@ jobs:
         env:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BREVO_API_KEY:             ${{ secrets.BREVO_API_KEY }}
+          ALERT_FROM_EMAIL:          ${{ secrets.ALERT_FROM_EMAIL }}
           RESEND_API_KEY:            ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL:         ${{ secrets.RESEND_FROM_EMAIL }}
           APP_URL:                   ${{ secrets.APP_URL }}

@@ -1,0 +1,25 @@
+# Secrets — NEVER commit. Local testing of the alert engine / news fetcher
+# reads these; they belong only in GitHub Actions secrets.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Supabase CLI local state (contains project linkage + local tokens)
+supabase/.temp/
+supabase/.branches/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# gstack / Claude local tooling
+.gstack/
+.claude/settings.local.json
