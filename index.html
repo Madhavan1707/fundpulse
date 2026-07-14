@@ -855,6 +855,7 @@ function showVerifyScreen(email, name) {
       if (authListener) { authListener.subscription.unsubscribe(); authListener = null; }
       const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
       clearUserData();
+      fpSetOwner(session.user?.id);
       const uname = session.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', uname);
       window.location.href = dest;
@@ -886,14 +887,24 @@ async function resendVerification(email) {
   setTimeout(() => { el.textContent = 'Resend email'; el.style.color = ''; }, 2500);
 }
 
-function clearUserData() {
-  localStorage.removeItem('fp_funds');
-  localStorage.removeItem('fp_alert_config');
-  localStorage.removeItem('fp_setup_done');
-  localStorage.removeItem('fp_swipe_tutored');
-  localStorage.removeItem('fp_expand_fund');
-  localStorage.removeItem('fp_pending_phone');
+// Wipe ALL of the previous user's cached data (funds, alerts, settings, reads,
+// bookmarks, name, email) so a second person signing in on the same browser can
+// never inherit it. Shared fund-data caches (fund list, NAVs) are not private
+// and are kept. fp_owner is stamped separately by fpSetOwner.
+function fpIsUserKey(k) {
+  return k && k.indexOf('fp_') === 0 &&
+    k !== 'fp_owner' && k !== 'fp_fund_list' && k !== 'fp_fund_list_ts' &&
+    k.indexOf('fp_nav_') !== 0;
 }
+function clearUserData() {
+  const rm = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (fpIsUserKey(k)) rm.push(k);
+  }
+  rm.forEach(k => localStorage.removeItem(k));
+}
+function fpSetOwner(uid) { if (uid) localStorage.setItem('fp_owner', uid); }
 
 // on page load — if this is the verification redirect, send to verified.html
 loadSupabase(async (sb) => {
@@ -1002,6 +1013,9 @@ function ha(type){
       // store name locally. Phone is NOT collected at signup — it's asked for
       // later, when the user turns on WhatsApp alerts (fp_pending_phone is only
       // ever set by that future flow; verified.html still honours it).
+      // Clear any previous user's leftovers on this browser and claim it.
+      clearUserData();
+      fpSetOwner(data.user?.id);
       localStorage.setItem('fp_username', capitaliseWords(name));
       // show verify screen — pass name for edit email pre-fill
       showVerifyScreen(email, capitaliseWords(name));
@@ -1028,6 +1042,7 @@ function ha(type){
       // read pending phone before clearing data, then redirect after login
       const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
       clearUserData();
+      fpSetOwner(data.user?.id);
       const name = data.user?.user_metadata?.full_name || 'there';
       localStorage.setItem('fp_username', name);
       localStorage.setItem('fp_email', email);

@@ -1,6 +1,60 @@
 const SUPABASE_URL  = 'https://acwrtldncexhhlzutppv.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjd3J0bGRuY2V4aGhsenV0cHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNzQ4NzcsImV4cCI6MjA5Mzk1MDg3N30.DTojjCkw2xY-XQ_-AOai5VlKHsN98XBpgt8AalN4cj4';
 
+// ── PER-USER LOCALSTORAGE ISOLATION ──
+// localStorage keys are shared per-browser, so on a shared device one user's
+// cached funds/settings/reads could leak to the next. This guard stamps the
+// browser with the owning user's id (fp_owner) and, if the current session
+// belongs to a different user, wipes the previous user's data BEFORE any screen
+// renders from it. Runs synchronously here (this classic script executes before
+// each screen's inline script), so stale data is gone before first paint.
+// Shared fund-data caches (fund list, NAVs) are not user-private and are kept.
+function fpIsUserKey(k) {
+  return k && k.indexOf('fp_') === 0 &&
+    k !== 'fp_owner' && k !== 'fp_fund_list' && k !== 'fp_fund_list_ts' &&
+    k.indexOf('fp_nav_') !== 0;
+}
+function fpWipeUserData() {
+  const rm = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (fpIsUserKey(k)) rm.push(k);
+  }
+  rm.forEach(k => localStorage.removeItem(k));
+}
+// Read the signed-in user's id synchronously from the persisted Supabase session
+// (no SDK needed — the token sits in localStorage). Returns null if not signed in.
+function fpCurrentUid() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k.indexOf('sb-') !== 0 || k.indexOf('-auth-token') === -1) continue;
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const obj  = JSON.parse(raw);
+      const sess = obj && obj.currentSession ? obj.currentSession : obj;
+      if (sess && sess.user && sess.user.id) return sess.user.id;
+      const token = (sess && sess.access_token) || (Array.isArray(obj) ? obj[0] : null);
+      if (token && token.split('.').length === 3) {
+        let p = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (p.length % 4) p += '=';
+        const payload = JSON.parse(atob(p));
+        if (payload && payload.sub) return payload.sub;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+(function fpGuardOwner() {
+  try {
+    const uid = fpCurrentUid();
+    if (!uid) return;                                  // no session — screen's own auth guard handles it
+    const prev = localStorage.getItem('fp_owner');
+    if (prev && prev !== uid) fpWipeUserData();        // different user's leftovers — wipe before render
+    localStorage.setItem('fp_owner', uid);
+  } catch (e) {}
+})();
+
 // Register the service worker (PWA install + push notifications)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function () {});
