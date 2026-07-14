@@ -2,9 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Live Status (as of 2026-07-13)
+## Live Status (as of 2026-07-14)
 
 **FundPulse is LIVE and public.** Phase 3 (real backend) is shipped end to end.
+
+> **Founder launch + scale guide:** see `docs/LAUNCH_PLAYBOOK.md` for the full go-to-market,
+> legal (SEBI/DPDP), domain, trademark/IP, cybersecurity, scaling, and marketing checklist.
 
 | Thing | Value |
 |---|---|
@@ -16,17 +19,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **URL gotcha:** the Vercel *Domains* value `fundpulse-chi.vercel.app` is the stable public production URL. The per-deploy `fundpulse-<hash>-madhavan1707s-projects.vercel.app` URLs are build snapshots and are SSO-protected (that's normal). `fundpulse.vercel.app` is a **different, unrelated project** — do not use it.
 
 **What is live and verified:**
-- Landing + auth (signup asks name/email/password only — no phone; signup requires a consent checkbox and shows a live password checklist), feed, alerts, watchlist, settings, profile, privacy page.
-- Live NAV + fund search (mfapi.in), live news (`news-fetcher.js`, every 2h), email alerts (Resend).
+- Landing + auth (signup asks name/email/password only — no phone; signup requires a consent checkbox linking Terms + Privacy, and shows a live password checklist), feed, alerts, watchlist, settings, profile, privacy page, terms page.
+- Live NAV + fund search (mfapi.in), live news (`news-fetcher.js`, every 2h), email alerts (Brevo default, Resend fallback).
+- **Email for real users (2026-07-14):** provider is pluggable (`scripts/email-sender.js`). Brevo (free 300/day) delivers to any recipient with a verified sender — Resend's shared domain only reached the account owner. Engine picks Brevo when `BREVO_API_KEY` is set, else Resend. Verified live: manual run logged `Email provider: brevo`.
+- **Desktop layout (2026-07-14):** app screens (feed/alerts/watchlist/settings/profile) widen from a 480px phone column to a 680px centered column with a top-docked nav at `min-width:900px`. Landing page was already responsive.
+- **Legal pages (2026-07-14):** `terms.html` (information-only / not-advice, data-accuracy + liability disclaimers, governing law India) linked from footer, signup consent, and alert emails. `privacy.html` expanded with DPDP Act 2023 rights (access/correct, withdraw consent, erasure, grievance contact) + legal-basis section. Advice-adjacent wording ("recommended") removed. "Past performance isn't indicative of future results" on watchlist returns + emails.
 - **PWA + web push (2026-07-13):** installable app (`manifest.webmanifest`, `sw.js`, `icons/`), push channel in the engine (`scripts/webpush.js`, RFC 8291/8292 on plain node:crypto — no deps). Push opt-in is the "Notifications on this device" toggle in Settings; subscriptions live in `push_subscriptions` (table applied to prod). Push is free — it bypasses the Resend 100/day cap.
 - **Engagement features (2026-07-13):** feed pulse card ("All quiet" vs "X moved past your alert level"), 🔖 Saved tab, onboarding starter packs, watchlist 30-day sparklines, alerts threshold hints ("typically moves ±X%/day → alert reaches you ~N×/month"), sample-alert preview in Settings.
 - Feed fund tabs pull tagged news across the whole 7-day window (`overlaps` query merged with newest-50); all app screens render synchronously from localStorage before the auth SDK loads (no flash between pages).
 - **Alert engine** runs daily 10:00 PM IST via GitHub Actions. Manual run verified 2026-07-13: retries transient NAV failures, skips stale NAVs (no weekend/holiday duplicate emails), dedups via `alert_log`, exits green when there's nothing fresh. The old "All NAV fetches failed → exit 1" bug is fixed.
-- **Security:** `db/schema.sql` has been run — news table is read-only to clients (anon INSERT/DELETE were open before), `alert_log` created. `delete-account` edge function deployed. Verified live with the anon key.
+- **Security:** `db/schema.sql` has been run — news table is read-only to clients (anon INSERT/DELETE were open before), `alert_log` created. `delete-account` edge function deployed. RLS re-verified live 2026-07-14 with the anon key: news insert denied (401), a real news row survived a delete attempt, watchlist/profiles/alert_log/push_subscriptions all return `[]` to anon. **Hardening (2026-07-14):** fund names escaped before `innerHTML` across feed/alerts/watchlist and in the alert email template (defense-in-depth). Added `.gitignore` so local `.env` / Supabase CLI tokens can't be committed. No secrets found in git history.
 
 **GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. **To reach real users, add `BREVO_API_KEY` + `ALERT_FROM_EMAIL`** (the sender you verified in Brevo) — the workflow already passes them through. The VAPID public key is also hardcoded in `app/settings.html` (`VAPID_PUBLIC_KEY` const) — client and engine must use the same pair; regenerating keys invalidates every stored subscription.
 
-**Still deliberately deferred (free-tier, pre-scale):** custom domain + email deliverability (SPF/DKIM, one-click unsubscribe; Resend free tier caps 100 emails/day), WhatsApp/SMS channels + phone OTP at opt-in, manager-change alert data source, analytics, monetisation. See "Phase 4" below.
+**Still deliberately deferred (free-tier, pre-scale):** custom domain (+ SPF/DKIM on it, one-click `List-Unsubscribe`), lifting the Brevo 300/day cap, WhatsApp/SMS channels + phone OTP at opt-in, manager-change alert data source, analytics, monetisation. See "Phase 4" below and `docs/LAUNCH_PLAYBOOK.md`.
+
+**Needs a human (not code) before scaling:** SEBI sign-off on positioning + the starter-packs feature (naming specific funds edges toward "recommendation"); NewsData.io free-tier commercial-use/redistribution check; trademark search + registration for "FundPulse"; move NAV to AMFI's official feed for cleaner licensing. Full list in `docs/LAUNCH_PLAYBOOK.md`.
 
 ## gstack
 Use /browse from gstack for all web browsing, never use mcp__claude-in-chrome__* tools.
@@ -65,7 +73,8 @@ Frontend will stay as plain HTML/JS until there is a validated user base — Nex
 |---|---|---|
 | `index.html` | Working | Landing page, signup/login modals, Supabase auth (inline). Signup asks name/email/password only — **no phone** (phone is asked later when WhatsApp alerts launch) |
 | `verified.html` | Working | Post email-verification confirmation (inline Supabase). Phone-OTP step only runs if `fp_pending_phone` exists (legacy / future WhatsApp opt-in) |
-| `privacy.html` | Working | Privacy policy + "not investment advice" disclaimer (linked from landing footer and alert emails) |
+| `privacy.html` | Working | Privacy policy + "not investment advice" disclaimer + DPDP Act 2023 rights/grievance contact (linked from landing footer, signup consent, alert emails) |
+| `terms.html` | Working | Terms of Use: information-only/not-advice, data-accuracy + liability disclaimers, governing law India (linked from landing footer, signup consent, alert emails) |
 | `app/feed.html` | Working | News feed (default landing after login) |
 | `app/alerts.html` | Working | Per-fund alert configuration + real alert history from `alert_log` |
 | `app/watchlist.html` | Working | Watchlist management + live NAV stats |
