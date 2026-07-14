@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Alert engine** runs daily 10:00 PM IST via GitHub Actions. Manual run verified 2026-07-13: retries transient NAV failures, skips stale NAVs (no weekend/holiday duplicate emails), dedups via `alert_log`, exits green when there's nothing fresh. The old "All NAV fetches failed → exit 1" bug is fixed.
 - **Security:** `db/schema.sql` has been run — news table is read-only to clients (anon INSERT/DELETE were open before), `alert_log` created. `delete-account` edge function deployed. Verified live with the anon key.
 
-**GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. The VAPID public key is also hardcoded in `app/settings.html` (`VAPID_PUBLIC_KEY` const) — client and engine must use the same pair; regenerating keys invalidates every stored subscription.
+**GitHub Actions secrets set:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `APP_URL` (= `https://fundpulse-chi.vercel.app`), `NEWSDATA_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. **To reach real users, add `BREVO_API_KEY` + `ALERT_FROM_EMAIL`** (the sender you verified in Brevo) — the workflow already passes them through. The VAPID public key is also hardcoded in `app/settings.html` (`VAPID_PUBLIC_KEY` const) — client and engine must use the same pair; regenerating keys invalidates every stored subscription.
 
 **Still deliberately deferred (free-tier, pre-scale):** custom domain + email deliverability (SPF/DKIM, one-click unsubscribe; Resend free tier caps 100 emails/day), WhatsApp/SMS channels + phone OTP at opt-in, manager-change alert data source, analytics, monetisation. See "Phase 4" below.
 
@@ -208,7 +208,10 @@ All-time high, drawdown, and AUM change alerts are in the product concept but no
 | mfapi.in | Live NAV data + fund search | Free, no key. Engine retries 3× with 15s timeout |
 | NewsData.io | News feed | Free tier; fetched every 2h by GitHub Actions |
 | GitHub Actions cron | Alert engine, daily 10:00 PM IST (`30 16 * * *` UTC) | Skips stale NAVs (weekend/holiday), dedups via `alert_log` |
-| Resend | Email alerts | Free tier: 100/day, 3,000/month — this caps alert volume until a domain is bought |
+| Brevo | Email alerts (default) | Free tier: 300/day. Delivers to ANY recipient once the sender address is verified in Brevo — no custom domain needed. Selected when `BREVO_API_KEY` + `ALERT_FROM_EMAIL` are set. |
+| Resend | Email alerts (fallback) | Free tier: 100/day, but without a verified custom domain only delivers to the Resend account owner. Used only if Brevo isn't configured. |
+
+**Email provider is pluggable** — `scripts/email-sender.js` (`createEmailSender`) picks Brevo if `BREVO_API_KEY` is set, else Resend. To reach real users, set the Brevo secrets (see below). The alert engine no longer hard-requires Resend.
 
 ## Deletion Consent Rule
 
