@@ -297,6 +297,9 @@
     .fc-nav-date {
       font-size: .6rem; color: var(--muted-2); margin-top: 10px; text-align: right;
     }
+    .fc-perf-disc {
+      font-size: .58rem; color: var(--muted-2); margin-top: 6px; font-style: italic; opacity: .8;
+    }
 
     /* ── SUMMARY BAR ── */
     .summary-bar {
@@ -563,7 +566,8 @@ function buildDetailHTML(price) {
     stat('52-week low',  price.low52w  || '—', ''),
   ].join('');
   const date = price.navDate ? `<div class="fc-nav-date">Unit price as of ${price.navDate}</div>` : '';
-  return `<div class="fc-stats-grid">${rows}</div>${date}`;
+  const disc = `<div class="fc-perf-disc">Past performance isn't indicative of future results.</div>`;
+  return `<div class="fc-stats-grid">${rows}</div>${date}${disc}`;
 }
 
 function toggleDetail(fundId) {
@@ -759,7 +763,7 @@ function wireSearch() {
     if (!matches.length) {
       res.innerHTML = '<div class="search-result-item"><span class="sri-name" style="color:var(--muted)">No funds found</span></div>';
     } else {
-      const hint = '<div style="padding:6px 12px 2px;font-size:.65rem;color:var(--muted);line-height:1.4;">Multiple results for the same fund differ by plan. <strong style="color:var(--white)">Direct Plan · Growth</strong> is recommended for most investors.</div>';
+      const hint = '<div style="padding:6px 12px 2px;font-size:.65rem;color:var(--muted);line-height:1.4;">Multiple results for the same fund differ by plan. <strong style="color:var(--white)">Direct Plan · Growth</strong> has lower annual fees than Regular plans.</div>';
       res.innerHTML = hint + matches.map(function (f) {
         const already = funds.find(function (a) { return a.id === f.id; });
         const meta = (f.variant ? f.variant + ' · ' : '') + (f.cat ? f.cat + ' · ' : '') + f.amc;

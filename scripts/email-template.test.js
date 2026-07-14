@@ -49,6 +49,18 @@ test('html contains view watchlist link', () => {
   assert.ok(html.includes('https://myapp.vercel.app/app/watchlist.html'));
 });
 
+test('escapes HTML in fund name (no raw markup reaches the email)', () => {
+  const { html, subject } = buildEmail({
+    fundName: '<img src=x onerror=alert(1)>Fund', fundCat: '<b>cat</b>',
+    type: 'rise', todayNav: 10, pctChange: 2.5, threshold: 2, appUrl: 'https://x.com',
+  });
+  assert.ok(!html.includes('<img src=x onerror=alert(1)>'), 'raw img tag must not appear');
+  assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'), 'fund name must be escaped');
+  assert.ok(!html.includes('<b>cat</b>'), 'raw category markup must not appear');
+  // subject is a plain-text mail header, not HTML — it is not escaped
+  assert.ok(subject.includes('<img src=x onerror=alert(1)>Fund'));
+});
+
 test('throws if pctChange sign mismatches type', () => {
   assert.throws(
     () => buildEmail({ fundName: 'X', fundCat: '', type: 'drop', todayNav: 50, pctChange: 3.5, threshold: 3, appUrl: 'https://x.com' }),
