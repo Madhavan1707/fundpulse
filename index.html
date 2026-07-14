@@ -447,6 +447,14 @@
     .mswitch { text-align:center; margin-top:13px; font-size:.74rem; color:var(--muted); }
     .mswitch a { color:var(--blue-light); cursor:pointer; }
     .mswitch a:hover { text-decoration:underline; }
+    /* Continue with Google — divider + button */
+    .oauth-divider { display:flex; align-items:center; gap:10px; margin:16px 0 14px; color:var(--muted-2); font-size:.72rem; }
+    .oauth-divider::before, .oauth-divider::after { content:''; flex:1; height:1px; background:rgba(255,255,255,.09); }
+    .google-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:10px; padding:11px; border-radius:8px; border:1px solid rgba(255,255,255,.14); background:#fff; color:#1f2430; font-family:'Plus Jakarta Sans',sans-serif; font-size:.88rem; font-weight:600; cursor:pointer; transition:all .2s; }
+    .google-btn:hover { background:#f2f4f8; transform:translateY(-1px); }
+    .google-btn:disabled { opacity:.6; cursor:default; transform:none; }
+    .google-btn svg { width:18px; height:18px; flex:none; }
+    .oauth-hint { font-size:.72rem; color:var(--muted); margin-top:8px; text-align:center; line-height:1.6; }
     /* live password requirements — shown under the signup password field */
     .pw-checklist { display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
     .pw-req { font-size:.64rem; font-weight:600; color:var(--muted-2); background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:100px; padding:3px 9px; transition:all .2s; }
@@ -788,8 +796,21 @@ function signupFormHTML(name, email){
       <span>I agree to the <a href="terms.html" target="_blank" onclick="event.stopPropagation()">Terms of Use</a> and <a href="privacy.html" target="_blank" onclick="event.stopPropagation()">Privacy Policy</a>, and understand FundPulse shares information about funds — never advice on what to buy or sell.</span>
     </label>
     <button class="mb" onclick="ha('signup')">Create Free Account</button>
+    ${googleBlockHTML()}
     <div class="mswitch">Have an account? <a onclick="switchTab('login')">Log in</a></div>
   `;
+}
+
+// Shared "— or — / Continue with Google" block used on both the login and
+// signup forms. One button handles both: OAuth is idempotent, so a returning
+// user is signed in and a new one is created + linked by email automatically.
+function googleBlockHTML(){
+  return `
+    <div class="oauth-divider">or</div>
+    <button type="button" class="google-btn" onclick="handleGoogle(this)">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continue with Google
+    </button>`;
 }
 
 function updatePwChecklist(pw){
@@ -811,8 +832,54 @@ function render(){
     <div class="mf"><label class="ml">Email address</label><input class="mi" type="email" placeholder="you@email.com"/></div>
     <div class="mf"><label class="ml">Password</label><input class="mi" type="password" placeholder="••••••••"/></div>
     <button class="mb" onclick="ha('login')">Log in to FundPulse</button>
+    ${googleBlockHTML()}
     <div class="mswitch">No account? <a onclick="switchTab('signup')">Sign up free</a></div>
   `:signupFormHTML('', '');
+}
+
+// Continue with Google. signInWithOAuth performs a full-page redirect to
+// Google on success, so there's nothing to do after except handle failure
+// (e.g. the provider isn't enabled in Supabase yet — the button then just
+// shows a friendly note and the email/password flow is untouched).
+function handleGoogle(btn){
+  if (btn) { btn.dataset.orig = btn.innerHTML; btn.disabled = true; btn.textContent = 'Redirecting…'; }
+  const errNote = document.getElementById('google-err');
+  if (errNote) errNote.remove();
+  withSupabase(async (sb) => {
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + '/index.html?oauth=1',
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (error) {
+      if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.orig; }
+      const host = document.getElementById('mform');
+      let note = document.getElementById('google-err');
+      if (!note && host) {
+        note = document.createElement('p');
+        note.id = 'google-err';
+        note.className = 'oauth-hint';
+        note.style.color = 'var(--red)';
+        host.appendChild(note);
+      }
+      if (note) note.textContent = 'Google sign-in isn’t available yet — please use email and password.';
+    }
+  });
+}
+
+// Nudge shown after a failed manual login: a Google-first user has no password
+// set, so email/password login can't work for them until they set one.
+function showGoogleLoginHint(){
+  const host = document.getElementById('mform');
+  if (!host || document.getElementById('google-login-hint')) return;
+  const p = document.createElement('p');
+  p.id = 'google-login-hint';
+  p.className = 'oauth-hint';
+  p.innerHTML = 'Signed up with Google? Use <b>Continue with Google</b> above.';
+  host.appendChild(p);
+  setTimeout(() => { const el = document.getElementById('google-login-hint'); if (el) el.remove(); }, 6000);
 }
 
 // show "check your email" screen inside the modal
@@ -906,21 +973,75 @@ function clearUserData() {
 }
 function fpSetOwner(uid) { if (uid) localStorage.setItem('fp_owner', uid); }
 
-// on page load — if this is the verification redirect, send to verified.html
+// Complete a session return and forward into the app. On a FRESH login (Google
+// OAuth, or first time a session is seen on this browser) it populates the
+// per-user locals + ensures a profiles row, then redirects. On a same-user
+// revisit it must NOT wipe cached funds/settings — it only forwards. This keeps
+// the previous "logged-in visitor → straight to feed" behaviour byte-for-byte.
+async function finishLogin(sb, session) {
+  const uid  = session.user && session.user.id;
+  const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
+  const sameUser = uid && localStorage.getItem('fp_owner') === uid && localStorage.getItem('fp_username');
+  if (!sameUser) {
+    const meta  = (session.user && session.user.user_metadata) || {};
+    const email = (session.user && session.user.email) || '';
+    const name  = meta.full_name || meta.name || (email ? capitalise(email.split('@')[0]) : 'there');
+    clearUserData();
+    fpSetOwner(uid);
+    localStorage.setItem('fp_username', name);
+    if (email) localStorage.setItem('fp_email', email);
+    // Google users skip verified.html (where manual signups get their profiles
+    // row), so ensure one exists. Best-effort — never block the redirect on it.
+    try { await sb.from('profiles').upsert({ id: uid, full_name: name }, { onConflict: 'id' }); } catch (e) {}
+  }
+  window.location.href = dest;
+}
+
+// on page load — route verification redirects, OAuth returns, and existing sessions
 loadSupabase(async (sb) => {
+  const params = new URLSearchParams(window.location.search);
+  const isOAuthReturn = params.get('oauth') === '1';   // Google redirected back here
   const hash = window.location.hash;
-  if (hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
+  // An OAuth failure (provider not enabled, user cancelled) comes back as an
+  // error param in the query or the hash rather than a thrown error.
+  const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+  const oauthError = params.get('error') || hashParams.get('error');
+
+  // Email-verification magic link → verified.html. Skip this when it's an OAuth
+  // return: implicit-flow Google also comes back with an access_token hash, and
+  // it must go to the app (finishLogin below), never to the email-confirm page.
+  if (!isOAuthReturn && hash && (hash.includes('access_token') || hash.includes('type=signup'))) {
     window.location.href = 'verified.html';
     return;
   }
+
+  // getSession() awaits the SDK's URL parsing (hash token or ?code exchange),
+  // so a successful Google return has a live session by the time this resolves.
   const { data } = await sb.auth.getSession();
   if (data?.session) {
-    const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
-    window.location.href = dest;
+    await finishLogin(sb, data.session);
     return;
   }
+
+  // Google came back without a session — tell the user why instead of a silent
+  // no-op. The most common cause pre-launch is the provider not being enabled.
+  if (isOAuthReturn && oauthError) {
+    history.replaceState({}, '', window.location.pathname);
+    openModal('login');
+    const host = document.getElementById('mform');
+    if (host) {
+      const note = document.createElement('p');
+      note.className = 'oauth-hint';
+      note.style.color = 'var(--red)';
+      note.textContent = oauthError === 'access_denied'
+        ? 'Google sign-in was cancelled.'
+        : 'Google sign-in isn’t available yet — please use email and password.';
+      host.appendChild(note);
+    }
+    return;
+  }
+
   // Coming back after email confirmation — open login modal directly
-  const params = new URLSearchParams(window.location.search);
   if (params.get('showlogin') === '1') {
     history.replaceState({}, '', window.location.pathname);
     openModal('login');
@@ -1037,7 +1158,9 @@ function ha(type){
       const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
       if (error) {
         b.textContent = 'Log in to FundPulse'; b.style.opacity = '1';
-        showFieldError(emailInput, 'Incorrect email or password.'); return;
+        showFieldError(emailInput, 'Incorrect email or password.');
+        showGoogleLoginHint();
+        return;
       }
       // read pending phone before clearing data, then redirect after login
       const dest = localStorage.getItem('fp_pending_phone') ? 'verified.html' : 'app/feed.html';
