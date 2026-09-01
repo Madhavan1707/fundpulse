@@ -1,0 +1,84 @@
+name: Provider Identity Check
+
+# TEMPORARY DIAGNOSTIC. Answers "which Brevo / Resend account do these keys
+# belong to?" without ever printing a key. Emails are masked because this
+# repo is public and Actions logs are world-readable.
+# Delete this file once the provider question is settled.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  whoami:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Identify email provider accounts
+        env:
+          BREVO_API_KEY:     ${{ secrets.BREVO_API_KEY }}
+          ALERT_FROM_EMAIL:  ${{ secrets.ALERT_FROM_EMAIL }}
+          RESEND_API_KEY:    ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+        run: |
+          node <<'EOF'
+          const mask = (s) => {
+            if (!s) return '(not set)';
+            const [l, d] = String(s).split('@');
+            if (!d) return l.slice(0, 2) + '***';
+            return l[0] + '*'.repeat(Math.max(1, l.length - 2)) + l.slice(-1) + '@' + d;
+          };
+
+          (async () => {
+            console.log('=== CONFIGURED SENDERS ===');
+            console.log('ALERT_FROM_EMAIL  (Brevo sender) :', mask(process.env.ALERT_FROM_EMAIL));
+            console.log('RESEND_FROM_EMAIL (Resend sender):', mask(process.env.RESEND_FROM_EMAIL));
+
+            console.log('\n=== BREVO ===');
+            if (!process.env.BREVO_API_KEY) {
+              console.log('BREVO_API_KEY not set');
+            } else {
+              const r = await fetch('https://api.brevo.com/v3/account', {
+                headers: { 'api-key': process.env.BREVO_API_KEY, Accept: 'application/json' },
+              });
+              const body = await r.text();
+              console.log('GET /v3/account ->', r.status);
+              if (r.ok) {
+                const a = JSON.parse(body);
+                console.log('  account email :', mask(a.email));
+                console.log('  company       :', a.companyName || '(none)');
+                console.log('  plan          :', JSON.stringify(a.plan || []).slice(0, 200));
+                console.log('  >> IP restriction is OFF for this key.');
+              } else if (body.includes('unrecognised IP')) {
+                console.log('  >> IP restriction is STILL ON for this key.');
+                console.log('  ', body.replace(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/g, '<runner-ip>').slice(0, 300));
+              } else {
+                console.log('  ', body.slice(0, 300));
+              }
+            }
+
+            console.log('\n=== RESEND ===');
+            if (!process.env.RESEND_API_KEY) {
+              console.log('RESEND_API_KEY not set');
+            } else {
+              const r = await fetch('https://api.resend.com/domains', {
+                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+              });
+              const body = await r.text();
+              console.log('GET /domains ->', r.status);
+              if (r.ok) {
+                const d = JSON.parse(body).data || [];
+                console.log('  verified domains:', d.length);
+                for (const x of d) console.log('   -', x.name, '| status:', x.status, '| region:', x.region);
+                if (!d.length) {
+                  console.log('  >> No domain. Resend free tier can only deliver to the');
+                  console.log('     Resend account owner address, not to app users.');
+                }
+              } else {
+                console.log('  ', body.slice(0, 300));
+              }
+            }
+          })();
+          EOF
