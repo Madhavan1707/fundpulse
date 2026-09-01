@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, wantsEmail, navDateToISO } = require('./alert-engine.js');
+const { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, wantsEmail, navDateToISO, dedupKey } = require('./alert-engine.js');
 
 // resolveSchemeCode
 test('resolves known legacy string id', () => {
@@ -95,6 +95,36 @@ test('navAgeDays counts IST calendar days and survives month boundaries', () => 
   assert.equal(navAgeDays('31-08-2026', now), 1);
   assert.equal(navAgeDays('28-08-2026', now), 4);
   assert.equal(navAgeDays('not-a-date', now), Infinity);
+});
+
+// alert_log dedup key
+// Regression: the lookup key omitted nav_date and the engine queried
+// alert_log where nav_date = today, while logSentAlert wrote the NAV's own
+// date. Those agreed only while isNavFresh() forced navDate === today. Once a
+// delayed run could evaluate yesterday's NAV the lookup matched nothing, and
+// run 33501404946 re-sent an alert that run 33501359074 had already delivered.
+test('dedupKey includes nav_date so a lookup cannot match a different date', () => {
+  const logged = dedupKey('u1', 'mirae-lc', 'drop', '2026-08-31');
+  assert.equal(logged, 'u1:mirae-lc:drop:2026-08-31');
+  const sent = new Set([logged]);
+  // what the engine now asks, evaluating the 31-08 NAV on 01-09
+  assert.equal(sent.has(dedupKey('u1', 'mirae-lc', 'drop', '2026-08-31')), true);
+  // a different NAV date is a genuinely different alert and must still send
+  assert.equal(sent.has(dedupKey('u1', 'mirae-lc', 'drop', '2026-09-01')), false);
+});
+test('dedupKey separates alert types and funds for the same NAV date', () => {
+  const sent = new Set([dedupKey('u1', 'mirae-lc', 'drop', '2026-08-31')]);
+  assert.equal(sent.has(dedupKey('u1', 'mirae-lc', 'rise', '2026-08-31')), false);
+  assert.equal(sent.has(dedupKey('u1', 'axis-bc',  'drop', '2026-08-31')), false);
+  assert.equal(sent.has(dedupKey('u2', 'mirae-lc', 'drop', '2026-08-31')), false);
+});
+test('dedupKey agrees with what navDateToISO writes to alert_log', () => {
+  // logSentAlert stores navDateToISO(nav.navDate); PostgREST reads it back as
+  // the same YYYY-MM-DD string, so the write and the lookup must line up.
+  assert.equal(
+    dedupKey('u1', 'mirae-lc', 'drop', navDateToISO('31-08-2026')),
+    dedupKey('u1', 'mirae-lc', 'drop', '2026-08-31')
+  );
 });
 
 // nav date conversion for alert_log

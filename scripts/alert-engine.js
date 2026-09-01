@@ -76,7 +76,7 @@ function navDateToISO(navDate) {
   return `${y}-${m}-${d}`;
 }
 
-module.exports = { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, MAX_NAV_AGE_DAYS, wantsEmail, navDateToISO };
+module.exports = { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, MAX_NAV_AGE_DAYS, wantsEmail, navDateToISO, dedupKey };
 
 // ── SUPABASE HELPERS ──
 
@@ -168,18 +168,31 @@ async function fetchNAV(schemeCode) {
   throw lastErr;
 }
 
-// alert_log dedup: which (user, fund, type) alerts already went out for this NAV date.
-// Missing table (schema.sql not run yet) must not break the engine — dedup just
-// degrades to off with a warning.
-async function fetchSentAlerts(supabaseUrl, serviceKey, isoDate) {
+// alert_log dedup key. MUST include nav_date, because logSentAlert writes the
+// NAV's own date and the lookup has to agree with the write. It used to key on
+// (user, fund, type) alone and query nav_date = today, which was only ever
+// correct while isNavFresh() forced navDate === today. Once a delayed run could
+// evaluate yesterday's NAV, the lookup missed every row and each extra cron slot
+// re-sent the same alert.
+function dedupKey(userId, fundId, alertType, isoNavDate) {
+  return `${userId}:${fundId}:${alertType}:${isoNavDate}`;
+}
+
+// Which (user, fund, type, nav_date) alerts already went out for the NAV dates
+// in play this run. Missing table (schema.sql not run yet) must not break the
+// engine — dedup just degrades to off with a warning.
+async function fetchSentAlerts(supabaseUrl, serviceKey, isoDates) {
+  const dates = [...new Set(isoDates)].filter(Boolean).sort();
+  if (!dates.length) return new Set();
   try {
-    const url = `${supabaseUrl}/rest/v1/alert_log?select=user_id,fund_id,alert_type&nav_date=eq.${isoDate}`;
+    const url = `${supabaseUrl}/rest/v1/alert_log`
+      + `?select=user_id,fund_id,alert_type,nav_date&nav_date=in.(${dates.join(',')})`;
     const res = await fetch(url, {
       headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows = await res.json();
-    return new Set(rows.map(r => `${r.user_id}:${r.fund_id}:${r.alert_type}`));
+    return new Set(rows.map(r => dedupKey(r.user_id, r.fund_id, r.alert_type, r.nav_date)));
   } catch (err) {
     console.warn(`  ⚠ Could not load alert_log (${err.message}) — dedup disabled for this run. Run db/schema.sql if you haven't.`);
     return null;
@@ -337,9 +350,11 @@ async function main() {
     return;
   }
 
-  // Step 3: load today's already-sent alerts for dedup (manual re-runs must not re-email)
-  const isoToday    = navDateToISO(todayISTString());
-  const alreadySent = await fetchSentAlerts(SUPABASE_URL, SERVICE_KEY, isoToday);
+  // Step 3: load already-sent alerts for dedup (extra cron slots and manual
+  // re-runs must not re-email). Scoped to the NAV dates actually in play, which
+  // is not necessarily today: a delayed run evaluates the last published NAV.
+  const isoNavDates = Object.values(navMap).map(n => navDateToISO(n.navDate));
+  const alreadySent = await fetchSentAlerts(SUPABASE_URL, SERVICE_KEY, isoNavDates);
 
   // Steps 4+5: check thresholds + send emails and pushes
   let sent     = 0;
@@ -370,9 +385,11 @@ async function main() {
     const fundName = fundNameMap[key] || config.fund_id;
     const fundCat  = fundCatMap[key]  || '';
 
+    const isoNavDate = navDateToISO(nav.navDate);
+
     for (const type of triggers) {
-      if (alreadySent && alreadySent.has(`${config.user_id}:${config.fund_id}:${type}`)) {
-        console.log(`  ○ ${type} alert for ${fundName} already sent today — skipping (dedup)`);
+      if (alreadySent && alreadySent.has(dedupKey(config.user_id, config.fund_id, type, isoNavDate))) {
+        console.log(`  ○ ${type} alert for ${fundName} already sent for NAV ${nav.navDate} — skipping (dedup)`);
         deduped++;
         continue;
       }
