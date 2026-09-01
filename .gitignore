@@ -22,4 +22,11 @@ Thumbs.db
 
 # gstack / Claude local tooling
 .gstack/
-.claude/settings.local.json
+.claude/
+
+# Superpowers planning docs — local working notes from the build, not project
+# documentation. Heads up: four files here (the 2026-05-26 alert-engine and
+# 2026-05-30 phone-verification plans/specs) were committed before this rule
+# and stay tracked, because .gitignore does not retroactively untrack anything.
+# `git rm --cached -r docs/superpowers/` if you want the whole directory local.
+docs/superpowers/
