@@ -2,7 +2,15 @@ name: Alert Engine
 
 on:
   schedule:
-    - cron: '30 16 * * *'  # 10:00 PM IST daily (after AMFI publishes NAVs; engine skips if today's NAV isn't out yet)
+    # 21:30, 22:30 and 23:30 IST. Three slots, not one, because GitHub delays
+    # scheduled runs under load (observed +36m to +8h34m on this repo), and a
+    # single daily slot means one delayed or failed run drops that day's alerts
+    # for good. alert_log dedups on (user, fund, type, nav_date), so whichever
+    # run first sees a new NAV sends and the rest are no-ops.
+    # Avoids :00/:30 on the hour where GitHub's queue is most congested.
+    - cron: '5 16 * * *'
+    - cron: '5 17 * * *'
+    - cron: '5 18 * * *'
   workflow_dispatch:        # manual trigger for testing
 
 jobs:

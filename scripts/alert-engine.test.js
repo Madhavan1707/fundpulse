@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, wantsEmail, navDateToISO } = require('./alert-engine.js');
+const { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, wantsEmail, navDateToISO } = require('./alert-engine.js');
 
 // resolveSchemeCode
 test('resolves known legacy string id', () => {
@@ -66,10 +66,35 @@ test('todayISTString rolls to next day after 6:30 PM UTC', () => {
   // 2026-07-13T19:00:00Z is 12:30 AM IST on 14 July
   assert.equal(todayISTString(new Date('2026-07-13T19:00:00Z')), '14-07-2026');
 });
-test('isNavFresh accepts today and rejects a stale (Friday) NAV', () => {
+test('isNavFresh accepts today and rejects a NAV older than the bound', () => {
   const now = new Date('2026-07-13T16:30:00Z');
   assert.equal(isNavFresh('13-07-2026', now), true);
-  assert.equal(isNavFresh('10-07-2026', now), false);
+  assert.equal(isNavFresh('08-07-2026', now), false);   // 5 days, past the bound
+});
+// Regression: GitHub delayed this cron past IST midnight on 2026-08-31 (run
+// started 21:34 UTC = 03:04 IST next day). The old `navDate === today` gate
+// then rejected Monday's real NAV as stale and no run could ever recover it,
+// because the gate only ever matched the current IST date.
+test('isNavFresh accepts yesterday NAV when the run drifts past IST midnight', () => {
+  const now = new Date('2026-08-31T21:34:50Z');          // 03:04 IST on 01-09
+  assert.equal(todayISTString(now), '01-09-2026');
+  assert.equal(isNavFresh('31-08-2026', now), true);
+});
+test('isNavFresh tolerates a long weekend but not stale upstream data', () => {
+  const now = new Date('2026-07-13T16:30:00Z');          // 10:00 PM IST, 13 July
+  assert.equal(isNavFresh('09-07-2026', now), true);     // 4 days, at the bound
+  assert.equal(isNavFresh('01-06-2026', now), false);    // months stale
+});
+test('isNavFresh rejects a future NAV date', () => {
+  const now = new Date('2026-07-13T16:30:00Z');
+  assert.equal(isNavFresh('14-07-2026', now), false);
+});
+test('navAgeDays counts IST calendar days and survives month boundaries', () => {
+  const now = new Date('2026-09-01T10:00:00Z');          // 3:30 PM IST, 01 Sep
+  assert.equal(navAgeDays('01-09-2026', now), 0);
+  assert.equal(navAgeDays('31-08-2026', now), 1);
+  assert.equal(navAgeDays('28-08-2026', now), 4);
+  assert.equal(navAgeDays('not-a-date', now), Infinity);
 });
 
 // nav date conversion for alert_log

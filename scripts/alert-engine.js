@@ -33,16 +33,33 @@ function checkThresholds(config, pctChange) {
   return triggers;
 }
 
-// mfapi.in dates are DD-MM-YYYY; compare against today in IST so a weekend/holiday
-// run (stale NAV) doesn't re-send yesterday's alert.
+// mfapi.in dates are DD-MM-YYYY. IST is the reference clock: AMFI publishes NAVs
+// on the Indian trading calendar, so NAV age is measured in IST calendar days.
 function todayISTString(now = new Date()) {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric',
   }).format(now).replace(/\//g, '-');
 }
 
+// GitHub delays this cron by hours (observed +36m to +8h34m), so a run meant for
+// 22:00 IST regularly lands after IST midnight. Gating on `navDate === today`
+// made every such run a silent no-op and permanently dropped that day's alerts.
+// alert_log's unique (user_id, fund_id, alert_type, nav_date) already guarantees
+// one send per NAV date, so we accept the newest NAV within MAX_NAV_AGE_DAYS
+// instead: a late run still delivers, and a repeat run dedups to nothing.
+// The bound stops a long mfapi outage from later alerting on ancient data.
+const MAX_NAV_AGE_DAYS = 4;
+
+function navAgeDays(navDate, now = new Date()) {
+  const [d, m, y] = String(navDate).split('-').map(Number);
+  if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y)) return Infinity;
+  const [td, tm, ty] = todayISTString(now).split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(y, m - 1, d)) / 86400000);
+}
+
 function isNavFresh(navDate, now = new Date()) {
-  return navDate === todayISTString(now);
+  const age = navAgeDays(navDate, now);
+  return age >= 0 && age <= MAX_NAV_AGE_DAYS;
 }
 
 // A config only produces an email if the user kept "email" among its channels
@@ -59,7 +76,7 @@ function navDateToISO(navDate) {
   return `${y}-${m}-${d}`;
 }
 
-module.exports = { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, wantsEmail, navDateToISO };
+module.exports = { resolveSchemeCode, checkThresholds, todayISTString, isNavFresh, navAgeDays, MAX_NAV_AGE_DAYS, wantsEmail, navDateToISO };
 
 // ── SUPABASE HELPERS ──
 
@@ -100,9 +117,12 @@ async function fetchUserEmails(supabaseUrl, serviceKey) {
   return emailMap;
 }
 
-const NAV_RETRIES     = 3;
+// mfapi.in is a single droplet with no CDN. The old [2s, 5s] budget gave up
+// after 7s of backoff, which is not enough to ride out even a short outage
+// (2026-08-31: three attempts each hit undici's 10s connect timeout, job died).
+const NAV_RETRIES     = 4;
 const NAV_TIMEOUT_MS  = 15000;
-const NAV_BACKOFF_MS  = [2000, 5000];
+const NAV_BACKOFF_MS  = [5000, 20000, 60000];
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -297,7 +317,7 @@ async function main() {
         return { fundId, nav: null, status: 'error' };
       }
       if (!isNavFresh(nav.navDate)) {
-        console.log(`  ○ NAV ${fundId} is dated ${nav.navDate} (today IST: ${todayISTString()}) — market holiday or NAV not yet published. Skipping to avoid duplicate alerts.`);
+        console.log(`  ○ NAV ${fundId} is dated ${nav.navDate} (today IST: ${todayISTString()}), older than ${MAX_NAV_AGE_DAYS} days — extended holiday or stale upstream data. Skipping.`);
         return { fundId, nav: null, status: 'stale' };
       }
       console.log(`  NAV ${fundId}: ₹${nav.todayNav.toFixed(2)} (${nav.pctChange.toFixed(2)}%) as of ${nav.navDate}`);
@@ -312,7 +332,7 @@ async function main() {
       console.error(`  ✗ All NAV fetches failed after ${NAV_RETRIES} attempts each — mfapi.in is unreachable. No alerts evaluated.`);
       process.exit(1);
     }
-    console.log('  ○ No fresh NAVs today — market holiday/weekend or NAV not yet published. Nothing to evaluate.');
+    console.log(`  ○ No NAV newer than ${MAX_NAV_AGE_DAYS} days — extended holiday or stale upstream data. Nothing to evaluate.`);
     console.log('\nDone. 0 email(s) sent, 0 error(s).');
     return;
   }
